@@ -1,0 +1,44 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+../lv_conf.h
+
+/Users/michael/Projects/WallDisplay/third_party/lvgl/lv_version.h
+
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/draw/sw/blend/helium/lv_blend_helium.S
+Pre_Include_Global.h
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/draw/sw/blend/helium/Pre_Include_Global.h
+RTE_Components.h
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/draw/sw/blend/helium/RTE_Components.h
+../../../../lv_conf_internal.h
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/lv_conf_internal.h
+
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/lv_conf_internal.h
+lv_conf_kconfig.h
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/lv_conf_kconfig.h
+lv_conf.h
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/lv_conf.h
+../../lv_conf.h
+/Users/michael/Projects/WallDisplay/third_party/lv_conf.h
+my_include.h
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/my_include.h
+
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/lv_conf_kconfig.h
+sdkconfig.h
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/sdkconfig.h
+esp_attr.h
+/Users/michael/Projects/WallDisplay/third_party/lvgl/src/esp_attr.h
+nuttx/config.h
+-
+../lv_version.h
+/Users/michael/Projects/WallDisplay/third_party/lvgl/lv_version.h
+lv_rt_thread_conf.h
+-
+
+/Users/michael/Projects/WallDisplay/visualizer/wasm/lv_conf.h
+

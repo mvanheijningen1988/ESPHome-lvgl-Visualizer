@@ -1,0 +1,17 @@
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/CMakeFiles/lvgl_runtime.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/CMakeFiles/edit_cache.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/CMakeFiles/rebuild_cache.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/CMakeFiles/list_install_components.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/CMakeFiles/install.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/CMakeFiles/install/local.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/CMakeFiles/install/strip.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/lvgl.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/lvgl_thorvg.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/lvgl_examples.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/lvgl_demos.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/edit_cache.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/rebuild_cache.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/list_install_components.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/install.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/install/local.dir
+/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/CMakeFiles/install/strip.dir

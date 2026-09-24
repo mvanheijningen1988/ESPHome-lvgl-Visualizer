@@ -1,0 +1,24 @@
+{
+  "name": "esp-home-visualizer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build:wasm": "emcmake cmake -S wasm -B wasm/build && cmake --build wasm/build --parallel 4 && mkdir -p public/wasm && cp wasm/build/lvgl_runtime.js wasm/build/lvgl_runtime.wasm public/wasm/",
+    "build:all": "npm run build:wasm && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^3.2.7"
+  },
+  "dependencies": {
+    "js-yaml": "^5.4.1"
+  }
+}

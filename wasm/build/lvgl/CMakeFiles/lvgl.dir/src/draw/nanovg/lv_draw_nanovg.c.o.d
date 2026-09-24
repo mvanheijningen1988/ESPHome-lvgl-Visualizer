@@ -1,0 +1,34 @@
+lvgl/CMakeFiles/lvgl.dir/src/draw/nanovg/lv_draw_nanovg.c.o: \
+  /Users/michael/Projects/WallDisplay/third_party/lvgl/src/draw/nanovg/lv_draw_nanovg.c \
+  /Users/michael/Projects/WallDisplay/third_party/lvgl/src/draw/nanovg/lv_draw_nanovg.h \
+  /Users/michael/Projects/WallDisplay/third_party/lvgl/src/draw/nanovg/../../misc/lv_types.h \
+  /Users/michael/Projects/WallDisplay/third_party/lvgl/src/draw/nanovg/../../misc/../lv_conf_internal.h \
+  /Users/michael/Projects/WallDisplay/visualizer/wasm/lv_conf.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/stdint.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/stdint.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/bits/alltypes.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/stddef.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/stddef.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stddef_header_macro.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stddef_ptrdiff_t.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stddef_size_t.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stddef_wchar_t.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stddef_null.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stddef_offsetof.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/stdbool.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/stdbool.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/inttypes.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/inttypes.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/features.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/limits.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/limits.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/bits/limits.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/compat/stdarg.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/stdarg.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/cache/sysroot/include/stdarg.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stdarg_header_macro.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stdarg___gnuc_va_list.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stdarg_va_list.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stdarg_va_arg.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stdarg___va_copy.h \
+  /opt/homebrew/Cellar/emscripten/6.0.9/libexec/llvm/lib/clang/24/include/__stdarg_va_copy.h

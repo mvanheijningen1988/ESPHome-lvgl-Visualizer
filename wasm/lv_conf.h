@@ -1,0 +1,44 @@
+#ifndef LV_CONF_H
+#define LV_CONF_H
+
+#define LV_COLOR_DEPTH 32
+#define LV_USE_OS LV_OS_NONE
+#define LV_USE_SDL 1
+#define LV_SDL_USE_EGL 0
+#define LV_USE_DRAW_SDL 0
+#define LV_USE_DRAW_SW 1
+#define LV_USE_LABEL 1
+#define LV_USE_BUTTON 1
+#define LV_USE_IMAGE 1
+#define LV_USE_FLEX 1
+#define LV_USE_GRID 1
+#define LV_USE_ANIMIMG 1
+#define LV_USE_BAR 1
+#define LV_USE_SWITCH 1
+#define LV_USE_SLIDER 1
+#define LV_USE_ARC 1
+#define LV_USE_CHECKBOX 1
+#define LV_USE_DROPDOWN 1
+#define LV_USE_SPINNER 1
+#define LV_USE_TEXTAREA 1
+#define LV_USE_ROLLER 1
+#define LV_USE_SPINBOX 1
+#define LV_USE_KEYBOARD 1
+#define LV_USE_TILEVIEW 1
+#define LV_USE_TABVIEW 1
+#define LV_USE_MSGBOX 1
+#define LV_USE_CANVAS 1
+#define LV_USE_QRCODE 1
+#define LV_USE_METER 1
+#define LV_USE_LINE 1
+#define LV_USE_LED 1
+#define LV_USE_BUTTONMATRIX 1
+#define LV_USE_TINY_TTF 1
+#define LV_TINY_TTF_FILE_SUPPORT 0
+#define LV_FONT_MONTSERRAT_24 1
+#define LV_FONT_MONTSERRAT_36 1
+#define LV_FONT_MONTSERRAT_48 1
+#define LV_MEM_SIZE (64U * 1024U * 1024U)
+#define LV_SDL_MOUSEWHEEL_MODE LV_SDL_MOUSEWHEEL_MODE_ENCODER
+
+#endif
