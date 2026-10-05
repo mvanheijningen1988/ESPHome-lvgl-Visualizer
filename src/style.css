@@ -1,3 +1,4 @@
+@import '../node_modules/monaco-editor/dev/vs/editor/editor.main.css';
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root { --ink: #dce7e3; --muted: #7d9290; --line: #29393a; --panel: #152022; --bg: #0d1517; --accent: #f5c451; --cyan: #81d9cf; --danger: #ff807a; font-family: 'Space Grotesk', sans-serif; color: var(--ink); background: var(--bg); font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
@@ -18,5 +19,17 @@ button, input, textarea, select { font: inherit; } button, select, input { color
 .yaml-editor, .preview-stage, .controls-panel, .entity-controls, .diagnostics { scrollbar-gutter: stable; overscroll-behavior: contain; }
 footer { width: min(1500px, 92vw); margin: 0 auto; padding: 20px 0 28px; justify-content: space-between; border-top: 1px solid var(--line); } footer a { color: var(--accent); text-decoration: none; }
 .default-mocks { display: flex; align-items: center; gap: 7px; white-space: nowrap; } .default-mocks input { width: 16px; height: 16px; accent-color: var(--accent); }
+.yaml-editor { position: absolute; inset: 0; width: auto; height: auto; min-height: 0; padding: 0; overflow: hidden; resize: none; }
+.yaml-editor .monaco-editor, .yaml-editor .overflow-guard { width: 100%; height: 100%; }
+.monaco-editor .yaml-source-selection { background: rgba(245,196,81,.12); }
+.monaco-editor .yaml-source-selection-gutter { border-left: 2px solid var(--accent); margin-left: 5px; }
+.source-file-control { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.source-file-control select { max-width: 150px; min-width: 90px; border: 1px solid var(--line); background: #101a1c; color: var(--ink); padding: 5px; font: 11px 'DM Mono', monospace; }
+@media (max-width: 720px) {
+	.editor-panel .editor-actions { justify-content: flex-start; flex-wrap: wrap; gap: 6px; }
+	.source-file-control select { max-width: 130px; min-width: 72px; }
+	.preview-panel .panel-head { align-items: flex-start; flex-direction: column; gap: 10px; }
+	.preview-tools { width: 100%; flex-wrap: wrap; justify-content: flex-start; }
+}
 @media (max-width: 1100px) { .content-grid { grid-template-columns: 1fr 1fr; grid-template-rows: 620px 190px 400px; height: auto; min-height: 0; } .editor-panel { grid-column: 1; grid-row: 1; } .preview-panel { grid-column: 2; grid-row: 1; } .diagnostics-panel { grid-column: 1 / -1; grid-row: 2; } .side-column { grid-column: 1 / -1; grid-row: 3; grid-template-columns: .72fr 2fr; grid-template-rows: minmax(0, 1fr); height: 400px; } }
 @media (max-width: 720px) { .topbar { padding: 0 20px; } .topbar-status { display: none; } .workspace { width: calc(100% - 32px); padding-top: 42px; } .intro { display: block; margin-bottom: 30px; } .intro-copy { margin-top: 24px; } .content-grid, .side-column { display: flex; flex-direction: column; height: auto; } .content-grid.is-source-expanded .preview-panel { visibility: visible; } .editor-panel, .preview-panel { flex: none; height: 490px; } .editor-panel .panel-head { flex-wrap: wrap; gap: 10px; } .editor-actions { width: 100%; justify-content: flex-end; } .editor-actions .line-count { display: none; } .diagnostics-panel { order: 3; flex: none; height: 220px; } .problem-filters { margin-left: 8px; } .problem-filters button { padding: 0 5px; font-size: 0; } .problem-filters button span, .problem-filters button b { font-size: 10px; } .side-column { order: 4; } .scenarios-panel { flex: none; height: 440px; } .diagnostic { grid-template-columns: 18px minmax(0, 1fr) minmax(80px, .35fr); } .diagnostic strong { display: none; } .preview-stage { padding: 18px; } .toolbar { flex-wrap: wrap; } .toolbar-spacer { display: none; } .drop-zone { flex: 1 1 100%; order: 3; text-align: center; } .parse-state { width: 100%; } footer { width: calc(100% - 32px); } }

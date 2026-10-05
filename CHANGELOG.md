@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## [1.0.0] - 2026-10-05
+
+- Fixed YAML caret and mouse positions drifting from visible characters after webfonts load; added browser regressions for End/arrow navigation, typing, Backspace/Delete, late fonts, and desktop/mobile horizontal scrolling.
 - Started the ESPHome LVGL visualizer project.
 - Added live YAML parsing with ESPHome tag placeholders and LVGL page/widget normalization.
 - Added the first editor, diagnostics, resolution controls, and preview shell.
@@ -23,3 +26,5 @@
 - Fixed native switches to retain ESPHome/LVGL's 50x25 default size and render visible main, indicator, and knob states.
 - Added typed opt-in mock defaults and local propagation of supported sensor-driven label text, text color, and switch checked updates.
 - Fixed renderer-to-YAML highlighting when an earlier nested key such as `logger.logs.lvgl` previously hid all top-level widget source ranges.
+- Replaced the textarea with a locally bundled Monaco YAML editor with folding, per-file models, and native undo/redo; added browser tests for selection locking, bidirectional linking, duplicate widgets, included-source navigation, and history.
+- Fixed typed, chained, hash-color, and include-filename substitutions; tracked source provenance through local includes and list/mapping packages so preview clicks open the defining YAML file.

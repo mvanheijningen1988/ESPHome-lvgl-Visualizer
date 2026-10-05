@@ -1,7 +1,7 @@
 {
   "name": "esp-home-visualizer",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "prepare": "node scripts/bootstrap-lvgl.mjs",
@@ -16,17 +16,19 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "prebuild:wasm": "node scripts/bootstrap-lvgl.mjs",
+    "test:e2e": "playwright test",
     "build:wasm": "emcmake cmake -S wasm -B wasm/build && cmake --build wasm/build --parallel 4 && mkdir -p public/wasm && cp wasm/build/lvgl_runtime.js wasm/build/lvgl_runtime.wasm public/wasm/",
     "prebuild:all": "node scripts/bootstrap-lvgl.mjs",
     "build:all": "npm run build:wasm && npm run test && npm run build"
   },
   "devDependencies": {
-    "@types/js-yaml": "^4.0.9",
+    "@playwright/test": "^1.63.0",
     "typescript": "~6.0.2",
     "vite": "^8.2.2",
     "vitest": "^3.2.7"
   },
   "dependencies": {
-    "js-yaml": "^5.4.1"
+    "monaco-editor": "^0.57.0",
+    "yaml": "^2.9.1"
   }
 }

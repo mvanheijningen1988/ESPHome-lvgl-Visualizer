@@ -242,16 +242,64 @@ Given widgets use content sizing, percentages, alignment, parent padding, duplic
 When a preview widget is hovered or clicked
 Then hit testing uses final LVGL coordinates and z-order
 And empty or zero-width widgets have a minimum interaction target around their native anchor
-And the exact deterministic YAML block is revealed
+And the exact source file and YAML block are revealed
 And clicking selects that block in the editor
 And its first line is centered in the editor when scroll limits allow
-And a visible highlight band and line-number gutter remain synchronized when the textarea loses focus or scrolls.
+And a visible editor decoration remains synchronized when the editor loses focus or scrolls.
+
+Given a widget is clicked in the preview
+When the pointer moves across other widgets in the same preview visit
+Then the clicked widget remains selected in both surfaces
+And rendering, resizing, and asynchronous asset completion do not change the selection.
+
+When the pointer leaves the preview and later enters it again
+Then hover can select a different widget
+And an explicit click can always replace the current selection.
+
+Given two anonymous widgets have the same type and content
+When either is clicked
+Then its unique source block is selected without matching by type or text alone.
 
 Given Link selection is disabled
 Then neither surface changes or displays linked selection state
 And both existing linked highlights are removed immediately.
 
-SF-019 through SF-022 change the browser UI and native WASM bridge only. YAML normalization, the model contract, asset loading, and ESPHome compatibility remain unchanged.
+### SF-023 YAML editing
+
+Given a YAML document is open
+Then mappings and sequences with nested content can be folded and unfolded
+And standard editor undo and redo restore text edits, paste, and indentation
+And selection, folding, preview navigation, and rendering do not create text-history entries.
+
+Given the editor is initialized before its webfont finishes loading
+When the font becomes available or another font loads later
+Then the caret and mouse hit testing use the current rendered character widths
+And End, arrow navigation, typing, Backspace, and Delete operate at the visible caret position
+And this remains true when long lines scroll horizontally on a narrow viewport.
+
+Given more than one YAML file is uploaded
+Then each file keeps its own editor model and undo history
+And opening an included or packaged widget selects its source file without changing the root file used for parsing.
+
+### SF-024 Substitution resolution
+
+Given YAML uses `$name`, `${name}`, a chained value, or a substituted local include filename
+When the visualizer parses the project
+Then preview properties receive the resolved value without rewriting the editor source
+And complete scalar substitutions preserve YAML types
+And hash colors remain strings instead of YAML comments.
+
+Given a substitution is missing, cyclic, or uses an unsupported Jinja expression
+Then a diagnostic identifies the problem rather than silently previewing a guessed value.
+
+### SF-025 Local package and include provenance
+
+Given a widget is expanded from an uploaded local include or package
+When that widget is selected in the preview
+Then the editor opens its original uploaded source file and selects its source block.
+
+Given a mapping or list package uses an uploaded local YAML file
+Then package widgets are merged into the preview and retain their source provenance.
 
 ## Change protocol
 
@@ -279,3 +327,10 @@ For every later functional change:
 | SF-019, SF-020 | Browser interaction verification for source controls, severity filters, and YAML rotation updates |
 | SF-021 | `npm run build:wasm` and native canvas screenshot verification |
 | SF-022 | Native coordinate bridge build, duplicate source-range test, and browser round-trip verification with aligned fixtures and `kitchen.yaml` |
+| SF-023 | `src/selection.test.ts`, `src/yaml.test.ts`, and `npm run test:e2e` for folding, history, both selection directions, file navigation, caret/text alignment, mouse editing, late fonts, and horizontal scrolling at desktop/mobile widths |
+| SF-024 | `src/yaml.test.ts` for typed, chained, embedded, color, and include-filename substitutions; Jinja remains out of scope |
+| SF-025 | `src/yaml.test.ts` and `npm run test:e2e` for include/package source ranges and file switching |
+
+SF-022 through SF-025 update the YAML parser/model and browser editor integration. The native LVGL bridge remains unchanged; both native and DOM preview selection paths are covered in the browser where available.
+
+The SF-023 caret correction refreshes Monaco font measurements after initial and subsequent browser font loads. It changes editor rendering and mouse hit testing only; parser, normalized model, WASM bridge, preview assets, and ESPHome compatibility remain unchanged.

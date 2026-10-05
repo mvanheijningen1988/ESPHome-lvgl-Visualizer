@@ -34,6 +34,7 @@ lvgl:
 
     expect(model.pages[0]).toMatchObject({ id: 'home', width: 800, height: 480 })
     expect(model.pages[0].widgets[0]).toMatchObject({ type: 'image', source: 'weather' })
+    expect(model.pages[0].widgets[0].color).toBe('#f5c451')
     expect(model.assets[0]).toMatchObject({ id: 'weather', file: 'background/weather.png' })
     expect(model.entities[0]).toMatchObject({ id: 'indoor_temp', entityId: 'sensor.indoor_temperature' })
     expect(model.topLayer[0].text).toBe('{{ indoor_temp }}')
@@ -48,6 +49,119 @@ lvgl:
 
     const missing = parseProjectYaml('!include missing.yaml', 'main.yaml', {})
     expect(missing.diagnostics.some((item) => item.message.includes('not uploaded'))).toBe(true)
+  })
+
+  it('resolves an include relative to its source directory before matching a duplicate basename', () => {
+    const model = parseProjectYaml('!include widget.yaml', 'devices/main.yaml', {
+      'devices/widget.yaml': 'lvgl:\n  pages:\n    - id: relative\n      widgets: []\n',
+      'widget.yaml': 'lvgl:\n  pages:\n    - id: wrong\n      widgets: []\n',
+    })
+
+    expect(model.pages[0]?.id).toBe('relative')
+  })
+
+  it('keeps included widget source ranges attached to the included file', () => {
+    const included = 'label:\n  id: imported_label\n  text: Imported\n'
+    const source = `lvgl:
+  pages:
+    - id: main
+      widgets:
+        - label:
+            id: local_label
+            text: Local
+        - !include imported.yaml
+`
+    const model = parseProjectYaml(source, 'main.yaml', { 'imported.yaml': included })
+    const imported = model.pages[0].widgets.find((widget) => widget.id === 'imported_label')
+
+    expect(imported?.sourceRange, JSON.stringify(model.pages[0].widgets.map(({ id, sourceRange }) => ({ id, sourceRange })))).toMatchObject({ start: 0, sourceFile: 'imported.yaml', startLine: 0 })
+    expect(included.slice(imported!.sourceRange!.start, imported!.sourceRange!.end)).toContain('id: imported_label')
+    expect(model.pages[0].widgets.find((widget) => widget.id === 'local_label')?.sourceRange?.sourceFile).toBe('main.yaml')
+  })
+
+  it('expands mapping includes without flattening their nested YAML fields', () => {
+    const model = parseProjectYaml(`
+display: !include display.yaml
+lvgl:
+  pages:
+    - id: main
+      widgets: []
+`, 'main.yaml', { 'display.yaml': 'width: 320\nheight: 240\n' })
+
+    expect(model.displayWidth).toBe(320)
+    expect(model.displayHeight).toBe(240)
+    expect(model.diagnostics.filter((item) => item.severity === 'error')).toHaveLength(0)
+  })
+
+  it('resolves substitutions in include filenames and preserves imported widget locations', () => {
+    const included = 'label:\n  id: dynamic_label\n  text: Dynamic\n'
+    const model = parseProjectYaml(`
+substitutions:
+  panel: kitchen
+lvgl:
+  pages:
+    - id: main
+      widgets:
+        - !include widget_${'$'}{panel}.yaml
+`, 'main.yaml', { 'widget_kitchen.yaml': included })
+
+    expect(model.pages[0].widgets[0]).toMatchObject({ id: 'dynamic_label', sourceRange: { sourceFile: 'widget_kitchen.yaml', start: 0 } })
+  })
+
+  it('applies scoped variables from multiline local includes', () => {
+    const included = 'label:\n  id: ${widget_id}\n  text: ${caption}\n'
+    const model = parseProjectYaml(`lvgl:
+  pages:
+    - id: main
+      widgets:
+        - !include
+            file: widget.yaml
+            vars:
+              widget_id: room_title
+              caption: Bedroom
+`, 'main.yaml', { 'widget.yaml': included })
+
+    expect(model.pages[0].widgets[0]).toMatchObject({ id: 'room_title', text: 'Bedroom' })
+    expect(model.diagnostics.filter((item) => item.severity === 'error')).toHaveLength(0)
+  })
+
+  it('merges locally included packages from list syntax and retains their widget source', () => {
+    const packageSource = `lvgl:
+  pages:
+    - id: packaged
+      widgets:
+        - label:
+            id: package_title
+            text: Package title
+`
+    const model = parseProjectYaml('packages:\n  - !include common.yaml\n', 'main.yaml', { 'common.yaml': packageSource })
+
+    expect(model.pages[0]?.widgets[0]).toMatchObject({ id: 'package_title', sourceRange: { sourceFile: 'common.yaml', startLine: 4 } })
+  })
+
+  it('resolves typed, chained and embedded substitutions without changing YAML meaning', () => {
+    const model = parseProjectYaml(`
+substitutions:
+  accent: '#f5c451'
+  width_value: 240
+  base_id: climate
+  widget_id: ${'$'}{base_id}
+  chained_id: ${'$'}{widget_id}
+lvgl:
+  pages:
+    - id: main
+      width: "${'$'}{width_value}"
+      widgets:
+        - label:
+            id: ${'$'}{chained_id}
+            x: ${'$'}{width_value}
+            bg_color: ${'$'}{accent}
+            text: "Width ${'$'}{width_value}"
+`)
+
+    expect(model.substitutions).toMatchObject({ width_value: 240 })
+    expect(model.pages[0], JSON.stringify(model.diagnostics)).toMatchObject({ width: 240 })
+    expect(model.pages[0].widgets[0]).toMatchObject({ id: 'climate', x: 240, color: '#f5c451', text: 'Width 240' })
   })
 
   it('keeps malformed YAML in diagnostics instead of throwing', () => {

@@ -23,7 +23,9 @@ From the workspace root, the same commands are available through the forwarding 
 
 `npm run build:wasm` compiles LVGL from `./third_party/lvgl` with Emscripten and copies the real runtime to `public/wasm`. The app must be served over HTTP. Opening the WebAssembly build through `file://` is not supported by browsers.
 
-The editable YAML surface is initialized before the optional WASM renderer. A slow or failed LVGL load therefore cannot hide the editor or stop live preview parsing.
+The YAML editor uses Monaco with YAML syntax coloring, nested mapping/sequence folding, two-space indentation, find, and VS Code-style undo/redo. Each uploaded YAML file keeps its own model and edit history. The first uploaded YAML remains the project root; selecting an included or packaged widget opens its original file without changing which configuration is parsed. The editor and DOM preview are initialized before the optional WASM renderer, so a slow or failed LVGL load cannot hide the editor or stop live preview parsing.
+
+Editor font measurements refresh when browser fonts finish loading, keeping the visible caret, mouse clicks, and text edits aligned, including horizontally scrolled lines on narrow screens.
 
 Fonts are loaded on demand from the active YAML. `gfonts://Family` and `{ type: gfonts, family, weight }` declarations fetch a matching TrueType file only after parsing that declaration. Hard-coded local paths such as `fonts/icons.ttf` are never read from the host filesystem: add the matching file through **Assets**. Missing or invalid fonts produce a diagnostic and use the built-in LVGL fallback. `extras` fonts are registered as fallback fonts for icon glyphs.
 
@@ -37,7 +39,11 @@ Workspace panels keep a bounded responsive height. Long YAML, mock entity lists,
 
 Source opens expanded across the editor and render columns. **Apply YAML** or the source arrow returns it to the compact editor column. The YAML editor shows scroll-synchronized line numbers. The Problems toolbar filters errors, warnings, and information independently while retaining per-severity counts. Rotation is editable in 90-degree steps and updates `display.rotation` in the YAML source.
 
-With **Link selection** enabled, selecting a YAML widget outlines its final LVGL bounds in the preview; selecting a widget on another page switches the preview to that page. Hovering a native or fallback preview widget reveals its exact YAML block with a focus-independent, scroll-synchronized highlight band, while clicking also selects that block in the editor. Duplicate anonymous widgets remain distinct, overlapping widgets follow LVGL z-order, and empty or zero-width widgets receive a small interaction target around their real LVGL anchor. Disable the checkbox to remove both linked highlights and inspect or edit the surfaces independently. Native `top_layer` and `bottom_layer` widgets render on their matching LVGL display layers, with readable default label text unless YAML specifies `text_color`.
+With **Link selection** enabled, selecting a YAML widget outlines its final LVGL bounds in the preview; selecting a widget on another page switches the preview to that page. Hovering a native or fallback preview widget reveals its exact YAML block, while clicking opens the widget's source file and selects that block in the editor. A clicked selection stays fixed while the pointer moves within the preview; hover resumes after the pointer leaves and re-enters. Duplicate anonymous widgets remain distinct, overlapping widgets follow LVGL z-order, and empty or zero-width widgets receive a small interaction target around their real LVGL anchor. Disable the checkbox to remove both linked highlights and inspect or edit the surfaces independently. Native `top_layer` and `bottom_layer` widgets render on their matching LVGL display layers, with readable default label text unless YAML specifies `text_color`.
+
+Local substitutions support `$name`, `${name}`, chained values, typed complete-scalar values, and substituted local include filenames. Missing or cyclic variables and unsupported Jinja expressions are reported in diagnostics. Jinja calculations, conditions, and filters are not evaluated.
+
+Run `npm run test:e2e` for browser interaction tests. Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to a local Chromium-compatible executable when Playwright's managed Chromium is not installed.
 
 ## Scope
 

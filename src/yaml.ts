@@ -1,4 +1,4 @@
-import { load } from 'js-yaml'
+import { isMap, isScalar, isSeq, parseDocument, type Scalar } from 'yaml'
 import type { Diagnostic, FontDefinition, FontSource, ImageAsset, LvglPage, LvglWidget, MockEntity, MockValue, VisualizerModel, WidgetAutomation } from './model'
 
 const supportedWidgets = new Set(['obj', 'container', 'label', 'button', 'switch', 'bar', 'image', 'animimg', 'arc', 'checkbox', 'dropdown', 'slider', 'spinner', 'textarea', 'qrcode', 'meter', 'line', 'led', 'roller', 'spinbox', 'buttonmatrix', 'keyboard', 'tabview', 'tileview', 'msgbox', 'canvas'])
@@ -8,7 +8,91 @@ type YamlMap = Record<string, unknown>
 function asMap(value: unknown): YamlMap { return value && typeof value === 'object' && !Array.isArray(value) ? value as YamlMap : {} }
 function asNumber(value: unknown): number | undefined { return typeof value === 'number' && Number.isFinite(value) ? value : undefined }
 function normalizeTags(source: string): string { return source.replace(/!(?:lambda|include|secret)\b/g, '') }
-function replaceSubstitutions(source: string, substitutions: Record<string, string>): string { return source.replace(/\$\{([^}]+)\}/g, (_, key: string) => substitutions[key] ?? `\${${key}}`) }
+function substitutionEnd(value: string, start: number): number {
+  let depth = 1
+  for (let index = start + 2; index < value.length; index += 1) {
+    if (value.startsWith('${', index)) { depth += 1; index += 1 }
+    else if (value[index] === '}') {
+      depth -= 1
+      if (depth === 0) return index + 1
+    }
+  }
+  return -1
+}
+
+function substituteScalar(value: string, substitutions: Record<string, unknown>, diagnostics: Diagnostic[], source: string, line: number, stack: string[] = []): unknown {
+  const parts: Array<{ text: string; value?: unknown; resolved: boolean }> = []
+  let cursor = 0
+  while (cursor < value.length) {
+    const start = value.indexOf('$', cursor)
+    if (start < 0 || value[start + 1] === '$') break
+    const end = value[start + 1] === '{' ? substitutionEnd(value, start) : start + 1 + (/^[A-Za-z_][\w.-]*/.exec(value.slice(start + 1))?.[0].length ?? 0)
+    if (end <= start + 1) { cursor = start + 1; continue }
+    const expression = value.slice(start + (value[start + 1] === '{' ? 2 : 1), end - (value[end - 1] === '}' ? 1 : 0)).trim()
+    parts.push({ text: value.slice(cursor, start), resolved: false })
+    const token = value.slice(start, end)
+    if (!/^[A-Za-z_][\w.-]*$/.test(expression) && !expression.includes('${')) {
+      diagnostics.push({ severity: 'warning', message: `Jinja substitution expression is not supported: ${token}`, source, line })
+      parts.push({ text: token, resolved: false })
+    } else {
+      const key = substituteScalar(expression, substitutions, diagnostics, source, line, stack)
+      const resolvedKey = String(key)
+      if (stack.includes(resolvedKey)) {
+        diagnostics.push({ severity: 'warning', message: `Cyclic substitution: ${[...stack, resolvedKey].join(' → ')}`, source, line })
+        parts.push({ text: token, resolved: false })
+      } else if (!Object.hasOwn(substitutions, resolvedKey)) {
+        diagnostics.push({ severity: 'warning', message: `Unknown substitution: ${resolvedKey}`, source, line })
+        parts.push({ text: token, resolved: false })
+      } else {
+        const replacement = substitutions[resolvedKey]
+        const resolvedValue = typeof replacement === 'string'
+          ? substituteScalar(replacement, substitutions, diagnostics, source, line, [...stack, resolvedKey])
+          : replacement
+        parts.push({ text: String(resolvedValue ?? ''), value: resolvedValue, resolved: true })
+      }
+    }
+    cursor = end
+  }
+  if (!parts.length) return value
+  parts.push({ text: value.slice(cursor), resolved: false })
+  if (parts.length === 3 && parts[0].text === '' && parts[1].resolved && parts[2].text === '') return parts[1].value
+  return parts.map((part) => part.text).join('')
+}
+
+function substituteDocument(sourceText: string, substitutions: Record<string, unknown>, diagnostics: Diagnostic[], source: string, origins?: SourceLine[]): YamlMap {
+  const document = parseDocument(normalizeTags(sourceText), { merge: true, uniqueKeys: false, prettyErrors: true })
+  if (document.errors.length) throw document.errors[0]
+  const visit = (node: unknown): void => {
+    if (isScalar(node)) {
+      if (typeof node.value === 'string') {
+        const position = node.range?.[0] ?? 0
+        const lineIndex = sourceText.slice(0, position).split('\n').length - 1
+        const origin = origins?.[lineIndex]
+        const line = origin ? origin.line + 1 : lineIndex + 1
+        node.value = substituteScalar(node.value, origin?.substitutions ?? substitutions, diagnostics, origin?.sourceFile ?? source, line) as Scalar<unknown>['value']
+      }
+    } else if (isSeq(node)) node.items.forEach(visit)
+    else if (isMap(node)) {
+      const resolvedKeys = new Set<string>()
+      for (const pair of node.items) {
+        visit(pair.key)
+        visit(pair.value)
+        const keyNode = isScalar(pair.key) ? pair.key : undefined
+        const key = keyNode ? String(keyNode.value) : undefined
+        if (key !== undefined && resolvedKeys.has(key)) {
+          const position = keyNode?.range?.[0] ?? 0
+          const lineIndex = sourceText.slice(0, position).split('\n').length - 1
+          const origin = origins?.[lineIndex]
+          const line = origin ? origin.line + 1 : lineIndex + 1
+          diagnostics.push({ severity: 'error', message: `Substitution creates duplicate YAML key: ${key}`, source: origin?.sourceFile ?? source, line })
+        }
+        if (key !== undefined) resolvedKeys.add(key)
+      }
+    }
+  }
+  visit(document.contents)
+  return asMap(document.toJS())
+}
 function mergeMaps(base: YamlMap, extra: YamlMap): YamlMap {
   const result: YamlMap = { ...base }
   for (const [key, value] of Object.entries(extra)) {
@@ -19,30 +103,109 @@ function mergeMaps(base: YamlMap, extra: YamlMap): YamlMap {
   return result
 }
 
-function resolveIncludes(source: string, sourceName: string, files: Record<string, string>, diagnostics: Diagnostic[], stack: string[]): string {
-  return source.split('\n').map((line) => {
+type SourceLine = { sourceFile: string; line: number; offset: number; length: number; hasNewline: boolean; substitutions: YamlMap }
+type ExpandedSource = { text: string; origins: SourceLine[] }
+
+function includeSpecification(tail: string, lines: string[], lineIndex: number, includeIndent: number): { path: string; variables: YamlMap; consumedThrough: number } | undefined {
+  let specification: unknown
+  let consumedThrough = lineIndex
+  if (tail.startsWith('{')) {
+    const document = parseDocument(tail, { merge: true, uniqueKeys: false })
+    if (document.errors.length) return undefined
+    specification = document.toJS()
+  } else if (!tail) {
+    let end = lineIndex + 1
+    while (end < lines.length) {
+      const candidate = lines[end]
+      if (!candidate.trim()) { end += 1; continue }
+      const indent = candidate.length - candidate.trimStart().length
+      if (indent <= includeIndent) break
+      end += 1
+    }
+    if (end > lineIndex + 1) {
+      const contentIndent = Math.min(...lines.slice(lineIndex + 1, end).filter((line) => line.trim()).map((line) => line.length - line.trimStart().length))
+      const content = lines.slice(lineIndex + 1, end).map((line) => line.slice(contentIndent)).join('\n')
+      const document = parseDocument(content, { merge: true, uniqueKeys: false })
+      if (document.errors.length) return undefined
+      specification = document.toJS()
+      consumedThrough = end - 1
+    }
+  } else return { path: tail.split(/[ \t#]/, 1)[0].replace(/^['"]|['"]$/g, ''), variables: {}, consumedThrough }
+  const record = asMap(specification)
+  return typeof record.file === 'string' ? { path: record.file, variables: asMap(record.vars), consumedThrough } : undefined
+}
+
+function resolveIncludes(source: string, sourceName: string, files: Record<string, string>, diagnostics: Diagnostic[], stack: string[], substitutions: YamlMap = {}): ExpandedSource {
+  const inputLines = source.split('\n')
+  const inputOrigins: SourceLine[] = []
+  let sourceOffset = 0
+  inputLines.forEach((line, index) => {
+    inputOrigins.push({ sourceFile: sourceName, line: index, offset: sourceOffset, length: line.length, hasNewline: index < inputLines.length - 1, substitutions })
+    sourceOffset += line.length + 1
+  })
+  const outputLines: string[] = []
+  const outputOrigins: SourceLine[] = []
+  let consumedThrough = -1
+  inputLines.forEach((line, lineIndex) => {
+    if (lineIndex <= consumedThrough) return
     const marker = line.indexOf('!include')
-    if (marker < 0 || line.slice(0, marker).includes('#')) return line
+    if (marker < 0 || line.slice(0, marker).includes('#')) {
+      outputLines.push(line)
+      outputOrigins.push(inputOrigins[lineIndex])
+      return
+    }
     const prefix = line.slice(0, marker)
     let indentationLength = 0
     while (indentationLength < prefix.length && (prefix[indentationLength] === ' ' || prefix[indentationLength] === '\t')) indentationLength += 1
     const indentation = prefix.slice(0, indentationLength)
     const valuePrefix = prefix.slice(indentationLength)
-    const includePath = line.slice(marker + '!include'.length).trim().split(/[ \t#]/, 1)[0]
-    const normalized = includePath.replace(/^['"]|['"]$/g, '')
-    const target = files[normalized] ?? files[`${sourceName.split('/').slice(0, -1).join('/')}/${normalized}`]
-    if (stack.includes(normalized)) {
-      diagnostics.push({ severity: 'error', message: `Cyclic !include detected: ${[...stack, normalized].join(' → ')}`, source: sourceName })
-      return `${indentation}${valuePrefix}null`
+    const includeTail = line.slice(marker + '!include'.length).trim()
+    const specification = includeSpecification(includeTail, inputLines, lineIndex, indentationLength)
+    if (!specification) {
+      diagnostics.push({ severity: 'warning', message: 'Unsupported !include syntax; expected a filename or file/vars mapping.', source: sourceName, line: lineIndex + 1 })
+      outputLines.push(`${indentation}${valuePrefix}null`)
+      outputOrigins.push(inputOrigins[lineIndex])
+      return
+    }
+    consumedThrough = specification.consumedThrough
+    const normalized = specification.path
+    const resolvedIncludePath = String(substituteScalar(normalized, substitutions, diagnostics, sourceName, lineIndex + 1))
+    const relativePath = `${sourceName.split('/').slice(0, -1).join('/')}/${resolvedIncludePath}`.replace(/^\//, '')
+    const targetName = files[relativePath] !== undefined ? relativePath : resolvedIncludePath
+    const target = files[targetName]
+    if (stack.includes(targetName)) {
+      diagnostics.push({ severity: 'error', message: `Cyclic !include detected: ${[...stack, targetName].join(' → ')}`, source: sourceName, line: lineIndex + 1 })
+      outputLines.push(`${indentation}${valuePrefix}null`)
+      outputOrigins.push(inputOrigins[lineIndex])
+      return
     }
     if (target === undefined) {
-      diagnostics.push({ severity: 'warning', message: `Included file not uploaded: ${normalized}`, source: sourceName })
-      return `${indentation}${valuePrefix}null`
+      diagnostics.push({ severity: 'warning', message: `Included file not uploaded: ${normalized}`, source: sourceName, line: lineIndex + 1 })
+      outputLines.push(`${indentation}${valuePrefix}null`)
+      outputOrigins.push(inputOrigins[lineIndex])
+      return
     }
-    const nested = resolveIncludes(target, normalized, files, diagnostics, [...stack, normalized])
-    const lines = nested.split('\n')
-    return lines.map((includedLine, index) => index === 0 ? `${indentation}${valuePrefix}${includedLine}` : `${indentation}${includedLine}`).join('\n')
-  }).join('\n')
+    const includeVariables = Object.fromEntries(Object.entries(specification.variables).map(([key, value]) => [key, typeof value === 'string' ? substituteScalar(value, substitutions, diagnostics, sourceName, lineIndex + 1) : value]))
+    const scopedSubstitutions = { ...substitutions, ...includeVariables }
+    const nested = resolveIncludes(target, targetName, files, diagnostics, [...stack, targetName], scopedSubstitutions)
+    const includedFirstLine = nested.text.split('\n').find((includedLine) => includedLine.trim() && !includedLine.trimStart().startsWith('#')) ?? ''
+    const blockMappingValue = /^\s*[^:]+:\s+$/.test(valuePrefix) && /^[^\s#][^:]*\s*:/.test(includedFirstLine)
+    if (blockMappingValue) {
+      outputLines.push(`${indentation}${valuePrefix.trimEnd()}`)
+      outputOrigins.push(inputOrigins[lineIndex])
+      nested.text.split('\n').forEach((includedLine, index) => {
+        outputLines.push(`${indentation}${' '.repeat(valuePrefix.length)}${includedLine}`)
+        outputOrigins.push(nested.origins[index] ?? inputOrigins[lineIndex])
+      })
+      return
+    }
+    const continuationIndent = `${indentation}${' '.repeat(valuePrefix.length)}`
+    nested.text.split('\n').forEach((includedLine, index) => {
+      outputLines.push(index === 0 ? `${indentation}${valuePrefix}${includedLine}` : `${continuationIndent}${includedLine}`)
+      outputOrigins.push(nested.origins[index] ?? inputOrigins[lineIndex])
+    })
+  })
+  return { text: outputLines.join('\n'), origins: outputOrigins }
 }
 
 function widgetFromEntry(entry: unknown, diagnostics: Diagnostic[], source: string): LvglWidget | undefined {
@@ -55,11 +218,7 @@ function widgetFromEntry(entry: unknown, diagnostics: Diagnostic[], source: stri
   const raw = asMap(record[type])
   const children = Array.isArray(raw.widgets) ? raw.widgets.map((child) => widgetFromEntry(child, diagnostics, source)).filter((child): child is LvglWidget => Boolean(child)) : []
   let text: string | undefined
-  if (typeof raw.text === 'string' && raw.text.includes('${')) {
-    const widgetName = typeof raw.id === 'string' ? `${type} ${raw.id}` : type
-    diagnostics.push({ severity: 'error', message: `Unresolved substitution in ${widgetName}: ${raw.text}`, source })
-    text = ''
-  } else if (typeof raw.text === 'string') text = raw.text
+  if (typeof raw.text === 'string') text = raw.text
   else if (typeof raw.text === 'number') text = String(raw.text)
   return {
     type,
@@ -121,8 +280,8 @@ function widgetLayer(line: number, top: { start: number; end: number } | undefin
   return 'page'
 }
 
-function scanWidgetSources(source: string): WidgetSourceCandidate[] {
-  const lines = source.split('\n')
+function scanWidgetSources(expanded: ExpandedSource): WidgetSourceCandidate[] {
+  const lines = expanded.text.split('\n')
   const offsets: number[] = []
   let offset = 0
   for (const line of lines) { offsets.push(offset); offset += line.length + 1 }
@@ -142,14 +301,27 @@ function scanWidgetSources(source: string): WidgetSourceCandidate[] {
     const id = directWidgetProperty(lines, index, endLine, indent, 'id')
     const text = directWidgetProperty(lines, index, endLine, indent, 'text')
     const layer = widgetLayer(index, topRange, bottomRange)
-    candidates.push({ type: match[2], id, text, layer, start: offsets[index], end: endLine < offsets.length ? offsets[endLine] : source.length, startLine: index, endLine })
+    const startOrigin = expanded.origins[index]
+    let endIndex = Math.min(lines.length - 1, Math.max(index, endLine - 1))
+    while (endIndex > index && expanded.origins[endIndex]?.sourceFile !== startOrigin?.sourceFile) endIndex -= 1
+    const endOrigin = expanded.origins[endIndex]
+    if (!startOrigin || !endOrigin) continue
+    candidates.push({
+      type: match[2], id, text, layer,
+      start: startOrigin.offset,
+      end: endOrigin.offset + endOrigin.length + (endOrigin.hasNewline ? 1 : 0),
+      startLine: startOrigin.line,
+      endLine: endOrigin.line + 1,
+      sourceFile: startOrigin.sourceFile,
+    })
   }
   return candidates
 }
 
-function assignWidgetSources(source: string, pages: LvglPage[], topLayer: LvglWidget[], bottomLayer: LvglWidget[]): void {
-  const candidates = scanWidgetSources(source)
+function assignWidgetSources(candidates: WidgetSourceCandidate[], pages: LvglPage[], topLayer: LvglWidget[], bottomLayer: LvglWidget[]): void {
   const used = new Set<WidgetSourceCandidate>()
+  let instanceIndex = 0
+  const instanceOccurrences = new Map<string, number>()
   const assign = (widgets: LvglWidget[], layer: WidgetSourceCandidate['layer']): void => {
     for (const widget of widgets) {
       const available = candidates.filter((candidate) => candidate.layer === layer && candidate.type === widget.type && !used.has(candidate))
@@ -157,9 +329,15 @@ function assignWidgetSources(source: string, pages: LvglPage[], topLayer: LvglWi
       if (!candidate && widget.text) candidate = available.find((item) => item.text === widget.text)
       candidate ??= available[0]
       if (candidate) {
-        widget.sourceRange = { start: candidate.start, end: candidate.end, startLine: candidate.startLine, endLine: candidate.endLine }
+        widget.sourceRange = { start: candidate.start, end: candidate.end, startLine: candidate.startLine, endLine: candidate.endLine, sourceFile: candidate.sourceFile }
+        const identity = widget.id
+          ? `${layer}:${candidate.sourceFile}:id:${widget.id}`
+          : `${layer}:${candidate.sourceFile}:offset:${candidate.start}:${widget.type}`
+        const occurrence = instanceOccurrences.get(identity) ?? 0
+        instanceOccurrences.set(identity, occurrence + 1)
+        widget.instanceKey = `${identity}:${occurrence}`
         used.add(candidate)
-      }
+      } else widget.instanceKey = `${layer}:unmapped:${instanceIndex++}`
       assign(widget.children, layer)
     }
   }
@@ -311,22 +489,31 @@ function discoverFonts(root: YamlMap): FontDefinition[] {
   })
 }
 
-function normalizeSource(source: string, sourceName: string, files: Record<string, string>, substitutions: Record<string, string>, diagnostics: Diagnostic[]): YamlMap {
-  const expanded = replaceSubstitutions(resolveIncludes(source, sourceName, files, diagnostics, [sourceName]), substitutions)
-  try { return asMap(load(normalizeTags(expanded))) }
+function normalizeSource(source: string, sourceName: string, files: Record<string, string>, substitutions: YamlMap, diagnostics: Diagnostic[]): YamlMap {
+  const expanded = resolveIncludes(source, sourceName, files, diagnostics, [sourceName], substitutions)
+  try { return substituteDocument(expanded.text, substitutions, diagnostics, sourceName, expanded.origins) }
   catch (error) { diagnostics.push({ severity: 'error', message: error instanceof Error ? error.message : 'YAML could not be parsed.', source: sourceName }); return {} }
 }
 
 export function parseProjectYaml(source: string, sourceName = 'editor.yaml', files: Record<string, string> = {}): VisualizerModel {
   const diagnostics: Diagnostic[] = []
-  const first = normalizeSource(source, sourceName, files, {}, diagnostics)
-  const substitutions = Object.fromEntries(Object.entries(asMap(first.substitutions)).map(([key, value]) => [key, typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? String(value) : '']))
+  const first = normalizeSource(source, sourceName, files, {}, [])
+  const substitutions = asMap(first.substitutions)
   let root = normalizeSource(source, sourceName, files, substitutions, diagnostics)
-  const packages = asMap(root.packages)
-  for (const packagePath of Object.values(packages)) {
-    if (typeof packagePath !== 'string') continue
+  const packageCandidates: WidgetSourceCandidate[] = []
+  const packageReferences = Array.isArray(root.packages) ? root.packages : Object.values(asMap(root.packages))
+  for (const packageReference of packageReferences) {
+    if (packageReference && typeof packageReference === 'object' && !Array.isArray(packageReference)) {
+      root = mergeMaps(asMap(packageReference), root)
+      continue
+    }
+    if (typeof packageReference !== 'string') continue
+    const packagePath = packageReference
     const packageSource = files[packagePath]
-    if (packageSource) root = mergeMaps(normalizeSource(packageSource, packagePath, files, substitutions, diagnostics), root)
+    if (packageSource) {
+      packageCandidates.push(...scanWidgetSources(resolveIncludes(packageSource, packagePath, files, [], [packagePath], substitutions)))
+      root = mergeMaps(normalizeSource(packageSource, packagePath, files, substitutions, diagnostics), root)
+    }
     else diagnostics.push({ severity: 'warning', message: `Package file not uploaded: ${packagePath}`, source: sourceName })
   }
   const lvgl = asMap(root.lvgl)
@@ -342,7 +529,12 @@ export function parseProjectYaml(source: string, sourceName = 'editor.yaml', fil
   if (!pages.length) diagnostics.push({ severity: 'info', message: 'No LVGL pages were found yet.', source: sourceName })
   const topLayer = listWidgets(lvgl.top_layer, diagnostics, sourceName)
   const bottomLayer = listWidgets(lvgl.bottom_layer, diagnostics, sourceName)
-  assignWidgetSources(source, pages, topLayer, bottomLayer)
+  const expandedRoot = resolveIncludes(source, sourceName, files, [], [sourceName], substitutions)
+  const includedFiles = [...new Set(expandedRoot.origins.map((origin) => origin.sourceFile).filter((file) => file !== sourceName))]
+  const includedCandidates = includedFiles.flatMap((file) => files[file]
+    ? scanWidgetSources(resolveIncludes(files[file], file, files, [], [file], substitutions))
+    : [])
+  assignWidgetSources([...scanWidgetSources(expandedRoot), ...includedCandidates, ...packageCandidates], pages, topLayer, bottomLayer)
   const declaredEntities = discoverEntities(root)
   const mockEntities = [...declaredEntities, ...discoverWidgetMocks(pages, topLayer, bottomLayer), ...discoverScriptMocks(root)]
   const uniqueEntities = [...new Map(mockEntities.map((entity) => {

@@ -18,7 +18,8 @@ export interface LvglWidget {
   height?: number | string
   color?: string
   source?: string
-  sourceRange?: { start: number; end: number; startLine: number; endLine: number }
+  instanceKey?: string
+  sourceRange?: { start: number; end: number; startLine: number; endLine: number; sourceFile?: string }
   children: LvglWidget[]
   raw: Record<string, unknown>
 }
@@ -83,6 +84,6 @@ export interface VisualizerModel {
   assets: ImageAsset[]
   entities: MockEntity[]
   automations: WidgetAutomation[]
-  substitutions: Record<string, string>
+  substitutions: Record<string, unknown>
   diagnostics: Diagnostic[]
 }

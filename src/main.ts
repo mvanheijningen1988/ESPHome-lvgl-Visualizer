@@ -4,6 +4,8 @@ import { parseProjectYaml } from './yaml'
 import { WasmLvglRenderer } from './lvgl-wasm'
 import { loadRequestedFonts } from './font-loader'
 import { loadOnlineImages } from './image-loader'
+import { YamlEditor } from './yaml-editor'
+import { clickPreview, createSelectionState, enterPreview, hoverPreview, leavePreview, selectFromEditor, setSelectionLinkEnabled } from './selection'
 
 const initialYaml = `display:
   width: 480
@@ -97,6 +99,8 @@ let imageLoadGeneration = 0
 let sourceExpanded = true
 let selectionLinkEnabled = true
 let linkedSourceOffset: number | undefined
+let rootSourceName = 'editor.yaml'
+let selectionState = createSelectionState<LvglWidget>()
 const visibleSeverities = new Set<Diagnostic['severity']>(['error', 'warning', 'info'])
 
 app.innerHTML = `
@@ -109,9 +113,37 @@ app.innerHTML = `
       <aside class="side-column"><article class="panel controls-panel"><div class="panel-head"><div><span class="panel-kicker">VIEWPORT</span><h2>Dimensions</h2></div></div><div class="dimension-grid"><label>Width<input id="width-input" type="number" min="1" placeholder="auto"></label><label>Height<input id="height-input" type="number" min="1" placeholder="auto"></label></div><label class="rotation-row"><span>Rotation</span><input id="rotation-input" type="number" min="0" max="270" step="90"></label></article><article class="panel scenarios-panel"><div class="panel-head"><div><span class="panel-kicker">MOCK ENTITIES</span><h2>Scenario values</h2></div><label class="default-mocks"><input id="default-mocks" type="checkbox"> Defaults</label></div><div id="entity-controls" class="entity-controls"><span class="muted-copy">Entities appear when declared in YAML.</span></div></article></aside>
     </section></main><footer><span>SPEC_FLOW tracked</span><a href="./SPEC_FLOW.md">Open specification ↗</a></footer>`
 
-const editor = document.querySelector<HTMLTextAreaElement>('#yaml-editor')!
-const yamlLineNumbers = document.querySelector<HTMLDivElement>('#yaml-line-numbers')!
-const yamlSelectionHighlight = document.querySelector<HTMLDivElement>('#yaml-selection-highlight')!
+const editorWrap = document.querySelector<HTMLDivElement>('.yaml-editor-wrap')!
+document.querySelector('#yaml-line-numbers')?.remove()
+document.querySelector('#yaml-selection-highlight')?.remove()
+document.querySelector('#yaml-editor')?.remove()
+const editorHost = document.createElement('div')
+editorHost.id = 'yaml-editor'
+editorHost.className = 'yaml-editor'
+editorWrap.append(editorHost)
+const editor = new YamlEditor(editorHost, initialYaml)
+const sourceFileSelect = document.createElement('select')
+sourceFileSelect.id = 'source-file-select'
+sourceFileSelect.setAttribute('aria-label', 'YAML source file')
+const sourceFileLabel = document.createElement('label')
+sourceFileLabel.className = 'source-file-control'
+sourceFileLabel.append('File ', sourceFileSelect)
+document.querySelector('.editor-actions')!.prepend(sourceFileLabel)
+const foldYamlButton = document.createElement('button')
+foldYamlButton.id = 'fold-yaml'
+foldYamlButton.type = 'button'
+foldYamlButton.title = 'Fold all YAML sections'
+foldYamlButton.setAttribute('aria-label', foldYamlButton.title)
+foldYamlButton.textContent = '−'
+const unfoldYamlButton = document.createElement('button')
+unfoldYamlButton.id = 'unfold-yaml'
+unfoldYamlButton.type = 'button'
+unfoldYamlButton.title = 'Unfold all YAML sections'
+unfoldYamlButton.setAttribute('aria-label', unfoldYamlButton.title)
+unfoldYamlButton.textContent = '+'
+sourceFileLabel.after(foldYamlButton, unfoldYamlButton)
+foldYamlButton.addEventListener('click', () => editor.foldAll())
+unfoldYamlButton.addEventListener('click', () => editor.unfoldAll())
 const preview = document.querySelector<HTMLDivElement>('#lvgl-preview')!
 const diagnostics = document.querySelector<HTMLDivElement>('#diagnostics')!
 const pageSelect = document.querySelector<HTMLSelectElement>('#page-select')!
@@ -156,7 +188,7 @@ function renderWidget(widget: LvglWidget, assets: ImageAsset[], widgetValues: Re
   const textValue = configuredText ? replaceMockTokens(configuredText) : undefined
   const text = textValue ? `<span>${escapeHtml(textValue)}</span>` : ''
   const checked = widget.type === 'switch' && (widgetValues[widget.id ?? ''] === true || widget.raw.state === true || widget.raw.checked === true) ? ' is-checked' : ''
-  return `<div class="lvgl-widget widget-${widget.type}${checked}" data-widget="${escapeHtml(widget.id ?? widget.type)}" style="${style}">${text}${children}</div>`
+  return `<div class="lvgl-widget widget-${widget.type}${checked}" data-widget-key="${escapeHtml(widget.instanceKey ?? '')}" style="${style}">${text}${children}</div>`
 }
 function diagnosticMarkup(item: Diagnostic): string {
   let icon = 'i'
@@ -231,12 +263,8 @@ function propagateSwitchMock(model: VisualizerModel, switchId: string, checked: 
   const source = model.automations.find((automation) => automation.property === 'checked' && automation.targetWidgetId === switchId)?.sourceId
   if (source) mockValues[source] = checked ? 1 : 0
 }
-type SourceRange = { start: number; end: number }
+type SourceRange = { start: number; end: number; startLine: number; endLine: number; sourceFile?: string }
 
-function visibleWidgets(model: VisualizerModel): LvglWidget[] {
-  const page = model.pages.find((candidate) => candidate.id === selectedPage) ?? model.pages[0]
-  return page ? [...model.bottomLayer, ...page.widgets, ...model.topLayer] : []
-}
 function widgetsInTree(widgets: LvglWidget[]): LvglWidget[] {
   return widgets.flatMap((widget) => [widget, ...widgetsInTree(widget.children)])
 }
@@ -246,20 +274,23 @@ function allModelWidgets(model: VisualizerModel): LvglWidget[] {
 function pageContainingWidget(model: VisualizerModel, widget: LvglWidget): string | undefined {
   return model.pages.find((page) => widgetsInTree(page.widgets).includes(widget))?.id
 }
-function estimatedWidgetBounds(widgets: LvglWidget[], parentX = 0, parentY = 0): Array<{ widget: LvglWidget; x: number; y: number; width: number; height: number }> {
-  return widgets.flatMap((widget) => {
-    const x = parentX + (typeof widget.x === 'number' ? widget.x : 0)
-    const y = parentY + (typeof widget.y === 'number' ? widget.y : 0)
-    let width = widget.type === 'label' ? Math.max(24, (widget.text?.length ?? 3) * 8) : 120
-    let height = widget.type === 'label' ? 24 : 48
-    if (typeof widget.width === 'number') width = widget.width
-    if (typeof widget.height === 'number') height = widget.height
-    return [{ widget, x, y, width, height }, ...estimatedWidgetBounds(widget.children, x, y)]
-  })
-}
 function currentWidgetBounds(): Array<{ widget: LvglWidget; x: number; y: number; width: number; height: number }> {
   const nativeBounds = wasmRenderer?.getWidgetBounds()
-  return nativeBounds?.length ? [...nativeBounds] : estimatedWidgetBounds(visibleWidgets(currentModel))
+  if (nativeBounds?.length) return [...nativeBounds]
+  return Array.from(preview.querySelectorAll<HTMLElement>('.lvgl-widget')).flatMap((element) => {
+    const key = element.dataset.widgetKey
+    const widget = key ? allModelWidgets(currentModel).find((candidate) => candidate.instanceKey === key) : undefined
+    if (!widget) return []
+    const previewRect = preview.getBoundingClientRect()
+    const elementRect = element.getBoundingClientRect()
+    return [{
+      widget,
+      x: (elementRect.left - previewRect.left) * surfaceWidth / previewRect.width,
+      y: (elementRect.top - previewRect.top) * surfaceHeight / previewRect.height,
+      width: elementRect.width * surfaceWidth / previewRect.width,
+      height: elementRect.height * surfaceHeight / previewRect.height,
+    }]
+  })
 }
 function widgetAtPoint(x: number, y: number): LvglWidget | undefined {
   return currentWidgetBounds().reverse().find((bounds) => {
@@ -274,7 +305,8 @@ function widgetSourceRange(widget: LvglWidget): SourceRange | undefined {
   return widget.sourceRange
 }
 function widgetAtSourceOffset(sourceOffset: number): LvglWidget | undefined {
-  return allModelWidgets(currentModel).map((widget) => ({ widget, range: widgetSourceRange(widget) })).filter((item): item is { widget: LvglWidget; range: SourceRange } => Boolean(item.range) && sourceOffset >= item.range!.start && sourceOffset < item.range!.end).sort((left, right) => (left.range.end - left.range.start) - (right.range.end - right.range.start))[0]?.widget
+  const matching = allModelWidgets(currentModel).map((widget) => ({ widget, range: widgetSourceRange(widget) })).filter((item): item is { widget: LvglWidget; range: SourceRange } => item.range !== undefined && (item.range.sourceFile ?? rootSourceName) === editor.documentName && sourceOffset >= item.range.start && sourceOffset < item.range.end)
+  return matching.sort((left, right) => (left.range.end - left.range.start) - (right.range.end - right.range.start))[0]?.widget
 }
 function showWidgetSelection(widget: LvglWidget | undefined): void {
   document.querySelector('.widget-selection')?.remove()
@@ -282,40 +314,34 @@ function showWidgetSelection(widget: LvglWidget | undefined): void {
   const bounds = currentWidgetBounds().find((item) => item.widget === widget)
   const frame = document.querySelector<HTMLElement>('.device-frame')
   if (!bounds || !frame) return
-  const markerWidth = Math.max(6, bounds.width)
-  const markerHeight = Math.max(6, bounds.height)
+  const scaleX = wasmRenderer ? surfaceWidth / wasmCanvas.width : 1
+  const scaleY = wasmRenderer ? surfaceHeight / wasmCanvas.height : 1
+  const markerWidth = Math.max(6, bounds.width * scaleX)
+  const markerHeight = Math.max(6, bounds.height * scaleY)
   const marker = document.createElement('div')
   marker.className = 'widget-selection'
-  marker.style.left = `${bounds.x + 10 - (markerWidth - bounds.width) / 2}px`
-  marker.style.top = `${bounds.y + 10 - (markerHeight - bounds.height) / 2}px`
+  marker.style.left = `${bounds.x * scaleX + 10 - (markerWidth - bounds.width * scaleX) / 2}px`
+  marker.style.top = `${bounds.y * scaleY + 10 - (markerHeight - bounds.height * scaleY) / 2}px`
   marker.style.width = `${markerWidth}px`
   marker.style.height = `${markerHeight}px`
   frame.append(marker)
 }
-function updateLineNumbers(): void {
-  const lineCount = editor.value.split('\n').length
-  yamlLineNumbers.innerHTML = Array.from({ length: lineCount }, (_, index) => `<span>${index + 1}</span>`).join('')
-  syncEditorDecorations()
-}
 function syncEditorDecorations(): void {
-  const paddingTop = Number.parseFloat(getComputedStyle(editor).paddingTop)
-  yamlLineNumbers.style.transform = `translateY(${paddingTop - editor.scrollTop}px)`
-  showYamlSelection(linkedSourceOffset === undefined ? undefined : widgetAtSourceOffset(linkedSourceOffset))
+  showYamlSelection(selectionState.selected)
 }
 function showYamlSelection(widget: LvglWidget | undefined): void {
   const range = widget?.sourceRange
-  yamlSelectionHighlight.classList.toggle('is-visible', selectionLinkEnabled && Boolean(range))
-  if (!selectionLinkEnabled || !range) return
-  const editorStyle = getComputedStyle(editor)
-  const lineHeight = Number.parseFloat(editorStyle.lineHeight)
-  const paddingTop = Number.parseFloat(editorStyle.paddingTop)
-  yamlSelectionHighlight.style.top = `${paddingTop + range.startLine * lineHeight - editor.scrollTop}px`
-  yamlSelectionHighlight.style.height = `${Math.max(lineHeight, (range.endLine - range.startLine) * lineHeight)}px`
+  if (!selectionLinkEnabled || !range || (range.sourceFile ?? rootSourceName) !== editor.documentName) {
+    editor.setSourceDecoration(undefined)
+    return
+  }
+  editor.setSourceDecoration(range.start, range.end)
 }
 function linkYamlSelection(): void {
   if (!selectionLinkEnabled) return
-  linkedSourceOffset = editor.selectionStart
+  linkedSourceOffset = editor.selectionEnd
   const widget = widgetAtSourceOffset(linkedSourceOffset)
+  selectionState = selectFromEditor(selectionState, widget)
   showYamlSelection(widget)
   const widgetPage = widget ? pageContainingWidget(currentModel, widget) : undefined
   if (widgetPage && widgetPage !== selectedPage) {
@@ -329,27 +355,28 @@ function selectWidgetSource(widget: LvglWidget, focusEditor: boolean): void {
   if (!selectionLinkEnabled) return
   const range = widgetSourceRange(widget)
   if (!range) return
+  const sourceFile = range.sourceFile ?? rootSourceName
+  if (sourceFile !== editor.documentName) {
+    editor.addDocument(sourceFile, projectFiles[sourceFile] ?? '')
+    editor.openDocument(sourceFile)
+    document.querySelector<HTMLSelectElement>('#source-file-select')?.setAttribute('data-active-file', sourceFile)
+  }
   linkedSourceOffset = range.start
-  editor.setSelectionRange(range.start, range.end)
-  const widgetRange = widget.sourceRange
-  const editorStyle = getComputedStyle(editor)
-  const lineHeight = Number.parseFloat(editorStyle.lineHeight)
-  const paddingTop = Number.parseFloat(editorStyle.paddingTop)
-  const startLine = widgetRange?.startLine ?? editor.value.slice(0, range.start).split('\n').length - 1
-  editor.scrollTop = Math.max(0, paddingTop + startLine * lineHeight - (editor.clientHeight - lineHeight) / 2)
-  if (focusEditor) editor.focus({ preventScroll: true })
+  editor.revealOffset(range.start, range.end)
+  if (focusEditor) editor.focus()
   showYamlSelection(widget)
   showWidgetSelection(widget)
 }
 function hoverWidgetSource(widget: LvglWidget | undefined): void {
-  if (!selectionLinkEnabled || !widget?.sourceRange) return
-  linkedSourceOffset = widget.sourceRange.start
-  const editorStyle = getComputedStyle(editor)
-  const lineHeight = Number.parseFloat(editorStyle.lineHeight)
-  const paddingTop = Number.parseFloat(editorStyle.paddingTop)
-  editor.scrollTop = Math.max(0, paddingTop + widget.sourceRange.startLine * lineHeight - (editor.clientHeight - lineHeight) / 2)
-  showYamlSelection(widget)
-  showWidgetSelection(widget)
+  if (!selectionLinkEnabled) return
+  selectionState = hoverPreview(selectionState, widget)
+  if (selectionState.selected !== widget) return
+  if (widget?.sourceRange) selectWidgetSource(widget, false)
+  else {
+    linkedSourceOffset = undefined
+    showYamlSelection(undefined)
+    showWidgetSelection(undefined)
+  }
 }
 function updatePreviewScale(): void {
   const frameInset = 22
@@ -377,6 +404,16 @@ function render(model: VisualizerModel): void {
   preview.style.setProperty('--surface-height', `${height}px`)
   updatePreviewScale()
   preview.innerHTML = page ? [...model.bottomLayer, ...page.widgets, ...model.topLayer].map((widget) => renderWidget(widget, model.assets, widgetValues, widgetTextColors)).join('') : '<div class="empty-preview">Add an <code>lvgl.pages</code> block to begin.</div>'
+  if (selectionState.selected) {
+    const key = selectionState.selected.instanceKey
+    let selected = key ? allModelWidgets(model).find((widget) => widget.instanceKey === key) : undefined
+    const sourceFile = selectionState.selected.sourceRange?.sourceFile ?? rootSourceName
+    if (!selected && sourceFile === editor.documentName) {
+      const trackedRange = editor.getTrackedSourceRange(sourceFile)
+      if (trackedRange) selected = widgetAtSourceOffset(trackedRange.start)
+    }
+    selectionState = { ...selectionState, selected }
+  }
   document.querySelector<HTMLDivElement>('#entity-controls')!.innerHTML = entityControls(model.entities, widgetValues)
   let diagnosticContent = filteredDiagnostics.map(diagnosticMarkup).join('')
   if (!diagnosticContent) {
@@ -390,11 +427,8 @@ function render(model: VisualizerModel): void {
   if (document.activeElement !== rotationInput) rotationInput.value = String(model.rotation ?? 0)
   document.querySelector('#parse-state')!.textContent = allDiagnostics.some((item) => item.severity === 'error') ? 'Needs attention' : 'Parsed just now'
   if (wasmRenderer) wasmRenderer.render(model, selectedPage, widgetValues, widgetTextColors)
-  if (linkedSourceOffset !== undefined) {
-    const linkedWidget = widgetAtSourceOffset(linkedSourceOffset)
-    showYamlSelection(linkedWidget)
-    showWidgetSelection(linkedWidget)
-  }
+  showYamlSelection(selectionState.selected)
+  showWidgetSelection(selectionState.selected)
 }
 function renderPreservingInput(model: VisualizerModel, selector: string, value: string | undefined, selectionStart: number | null, selectionEnd: number | null): void {
   render(model)
@@ -427,10 +461,9 @@ async function synchronizeImages(model: VisualizerModel): Promise<void> {
   render(model)
 }
 function parseAndRender(): void {
-  yamlSource = editor.value
-  updateLineNumbers()
+  yamlSource = editor.getDocumentValue(rootSourceName) ?? editor.value
   try {
-    currentModel = parseProjectYaml(yamlSource, 'editor.yaml', projectFiles)
+    currentModel = parseProjectYaml(yamlSource, rootSourceName, projectFiles)
     fontDiagnostics = []
     imageDiagnostics = []
     render(currentModel)
@@ -438,7 +471,7 @@ function parseAndRender(): void {
     void synchronizeImages(currentModel)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Preview could not be updated.'
-    currentModel = { ...currentModel, diagnostics: [{ severity: 'error', message, source: 'editor.yaml' }] }
+    currentModel = { ...currentModel, diagnostics: [{ severity: 'error', message, source: rootSourceName }] }
     render(currentModel)
   }
 }
@@ -452,6 +485,9 @@ function setSourceExpanded(expanded: boolean): void {
   window.requestAnimationFrame(updatePreviewScale)
 }
 function updateYamlRotation(value: number): void {
+  if (!editor.hasDocument(rootSourceName)) editor.addDocument(rootSourceName, yamlSource)
+  editor.openDocument(rootSourceName)
+  sourceFileSelect.value = rootSourceName
   const rotation = Math.max(0, Math.min(270, Math.round(value / 90) * 90))
   const lines = editor.value.split('\n')
   const displayStart = lines.findIndex((line) => /^display\s*:\s*(?:#.*)?$/.test(line))
@@ -466,35 +502,50 @@ function updateYamlRotation(value: number): void {
     if (rotationLine >= 0) lines[rotationLine] = lines[rotationLine].replace(/^(\s*rotation\s*:)\s*[^#]*/, `$1 ${rotation}`)
     else lines.splice(displayStart + 1, 0, `  rotation: ${rotation}`)
   }
-  editor.value = lines.join('\n')
+  editor.replaceValue(lines.join('\n'))
   rotationInput.value = String(rotation)
   parseAndRender()
   document.querySelector('#editor-status')!.textContent = 'Rotation updated in YAML'
 }
 let debounceTimer: number | undefined
-editor.addEventListener('input', () => {
+editor.onDidChange((sourceFile, value) => {
+  projectFiles[sourceFile] = value
   document.querySelector('#editor-status')!.textContent = 'Unsaved changes'
   window.clearTimeout(debounceTimer)
   debounceTimer = window.setTimeout(() => { parseAndRender(); document.querySelector('#editor-status')!.textContent = 'Preview updated' }, 260)
 })
-editor.addEventListener('paste', (event) => {
-  const text = event.clipboardData?.getData('text/plain')
-  if (text === undefined) return
-  event.preventDefault()
-  editor.setRangeText(text, editor.selectionStart, editor.selectionEnd, 'end')
-  editor.dispatchEvent(new Event('input', { bubbles: true }))
+editor.onDidChangeSelection((sourceFile, start, end, programmatic) => {
+  sourceFileSelect.value = sourceFile
+  if (programmatic || !selectionLinkEnabled) return
+  linkedSourceOffset = end > start ? end - 1 : end
+  const widget = widgetAtSourceOffset(linkedSourceOffset)
+  selectionState = selectFromEditor(selectionState, widget)
+  editor.trackSourceRange(sourceFile, widget?.sourceRange?.start, widget?.sourceRange?.end)
+  const widgetPage = widget ? pageContainingWidget(currentModel, widget) : undefined
+  if (widgetPage && widgetPage !== selectedPage) {
+    selectedPage = widgetPage
+    render(currentModel)
+  } else {
+    showYamlSelection(widget)
+    showWidgetSelection(widget)
+  }
 })
-editor.addEventListener('keydown', (event) => {
-  if (event.key !== 'Tab') return
-  event.preventDefault()
-  const start = editor.selectionStart
-  const end = editor.selectionEnd
-  editor.setRangeText('  ', start, end, 'end')
-  editor.dispatchEvent(new Event('input', { bubbles: true }))
+editor.onDidScroll(syncEditorDecorations)
+sourceFileSelect.addEventListener('change', () => {
+  editor.openDocument(sourceFileSelect.value)
+  selectionState = selectFromEditor(selectionState, undefined)
+  linkedSourceOffset = undefined
+  editor.trackSourceRange(editor.documentName, undefined)
+  showYamlSelection(undefined)
+  showWidgetSelection(undefined)
 })
-editor.addEventListener('click', linkYamlSelection)
-editor.addEventListener('select', linkYamlSelection)
-editor.addEventListener('scroll', syncEditorDecorations)
+function refreshSourceFileSelect(): void {
+  const selected = editor.documentName
+  const files = [...new Set([rootSourceName, ...Object.keys(projectFiles)])]
+  sourceFileSelect.innerHTML = files.map((file) => `<option value="${escapeHtml(file)}">${escapeHtml(file)}${file === rootSourceName ? ' (root)' : ''}</option>`).join('')
+  sourceFileSelect.value = selected
+}
+refreshSourceFileSelect()
 document.querySelector<HTMLButtonElement>('#apply-yaml')!.addEventListener('click', () => {
   window.clearTimeout(debounceTimer)
   parseAndRender()
@@ -504,9 +555,11 @@ document.querySelector<HTMLButtonElement>('#apply-yaml')!.addEventListener('clic
 document.querySelector<HTMLButtonElement>('#collapse-source')!.addEventListener('click', () => setSourceExpanded(!sourceExpanded))
 document.querySelector<HTMLInputElement>('#link-selection')!.addEventListener('change', (event) => {
   selectionLinkEnabled = (event.target as HTMLInputElement).checked
+  selectionState = setSelectionLinkEnabled(selectionState, selectionLinkEnabled)
   if (!selectionLinkEnabled) {
     document.querySelector('.widget-selection')?.remove()
-    yamlSelectionHighlight.classList.remove('is-visible')
+    editor.setSourceDecoration(undefined)
+    editor.clearTrackedSourceRanges()
   }
   else linkYamlSelection()
 })
@@ -531,10 +584,17 @@ document.querySelectorAll<HTMLButtonElement>('[data-scale]').forEach((button) =>
 new ResizeObserver(updatePreviewScale).observe(previewStage)
 async function handleYamlFiles(files: File[]): Promise<void> {
   if (!files.length) return
-  for (const file of files) projectFiles[file.name] = await file.text()
+  for (const file of files) {
+    const sourceFile = file.webkitRelativePath || file.name
+    projectFiles[sourceFile] = await file.text()
+    editor.addDocument(sourceFile, projectFiles[sourceFile])
+  }
   const root = files.find((file) => /\.ya?ml$/i.test(file.name))
   if (root) {
-    editor.value = projectFiles[root.name]
+    rootSourceName = root.webkitRelativePath || root.name
+    editor.openDocument(rootSourceName)
+    sourceFileSelect.value = rootSourceName
+    refreshSourceFileSelect()
     parseAndRender()
   }
   document.querySelector('#parse-state')!.textContent = `${files.length} YAML files staged`
@@ -588,35 +648,28 @@ document.querySelector<HTMLInputElement>('#default-mocks')!.addEventListener('ch
 parseAndRender()
 
 const wasmCanvas = document.querySelector<HTMLCanvasElement>('#lvgl-canvas')!
-wasmCanvas.addEventListener('pointermove', (event) => {
-  if (!selectionLinkEnabled) return
-  const rect = wasmCanvas.getBoundingClientRect()
-  const x = (event.clientX - rect.left) * surfaceWidth / rect.width
-  const y = (event.clientY - rect.top) * surfaceHeight / rect.height
-  hoverWidgetSource(widgetAtPoint(x, y))
-})
-wasmCanvas.addEventListener('click', (event) => {
-  if (!selectionLinkEnabled) return
-  const rect = wasmCanvas.getBoundingClientRect()
-  const x = (event.clientX - rect.left) * surfaceWidth / rect.width
-  const y = (event.clientY - rect.top) * surfaceHeight / rect.height
-  const widget = widgetAtPoint(x, y)
-  if (widget) selectWidgetSource(widget, false)
-})
-preview.addEventListener('pointermove', (event) => {
-  if (!selectionLinkEnabled) return
+previewStage.addEventListener('pointerenter', () => { selectionState = enterPreview(selectionState) })
+previewStage.addEventListener('pointerleave', () => { selectionState = leavePreview(selectionState) })
+function widgetUnderPreviewPointer(event: PointerEvent): LvglWidget | undefined {
+  if (event.target === wasmCanvas) {
+    const rect = wasmCanvas.getBoundingClientRect()
+    return widgetAtPoint((event.clientX - rect.left) * wasmCanvas.width / rect.width, (event.clientY - rect.top) * wasmCanvas.height / rect.height)
+  }
   const element = (event.target as HTMLElement).closest<HTMLElement>('.lvgl-widget')
-  if (!element) return
-  const key = element.dataset.widget
-  const widget = currentWidgetBounds().reverse().find(({ widget: candidate }) => (candidate.id ?? candidate.type) === key)?.widget
-  hoverWidgetSource(widget)
-})
-preview.addEventListener('click', (event) => {
-  if (!selectionLinkEnabled) return
-  const element = (event.target as HTMLElement).closest<HTMLElement>('.lvgl-widget')
-  const key = element?.dataset.widget
-  const widget = currentWidgetBounds().reverse().find(({ widget: candidate }) => (candidate.id ?? candidate.type) === key)?.widget
+  const key = element?.dataset.widgetKey
+  return key ? allModelWidgets(currentModel).find((widget) => widget.instanceKey === key) : undefined
+}
+previewStage.addEventListener('pointermove', (event) => hoverWidgetSource(widgetUnderPreviewPointer(event)))
+previewStage.addEventListener('click', (event) => {
+  const widget = widgetUnderPreviewPointer(event as PointerEvent)
+  selectionState = clickPreview(selectionState, widget)
+  linkedSourceOffset = widget?.sourceRange?.start
   if (widget) selectWidgetSource(widget, false)
+  else {
+    showYamlSelection(undefined)
+    showWidgetSelection(undefined)
+    editor.trackSourceRange(editor.documentName, undefined)
+  }
 })
 async function initializeWasm(): Promise<void> {
   try {
