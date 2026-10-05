@@ -4,12 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "prepare": "node scripts/bootstrap-lvgl.mjs",
+    "setup:lvgl": "node scripts/bootstrap-lvgl.mjs",
+    "predev": "node scripts/bootstrap-lvgl.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/bootstrap-lvgl.mjs",
     "build": "tsc && vite build",
+    "prepreview": "node scripts/bootstrap-lvgl.mjs",
     "preview": "vite preview",
+    "pretest": "node scripts/bootstrap-lvgl.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "prebuild:wasm": "node scripts/bootstrap-lvgl.mjs",
     "build:wasm": "emcmake cmake -S wasm -B wasm/build && cmake --build wasm/build --parallel 4 && mkdir -p public/wasm && cp wasm/build/lvgl_runtime.js wasm/build/lvgl_runtime.wasm public/wasm/",
+    "prebuild:all": "node scripts/bootstrap-lvgl.mjs",
     "build:all": "npm run build:wasm && npm run test && npm run build"
   },
   "devDependencies": {

@@ -12,9 +12,16 @@ npm run build
 npm run build:all
 ```
 
+The project now bootstraps `./third_party/lvgl` automatically before npm scripts run. By default it resolves the latest LVGL GitHub release, and you can pin an explicit version either through the environment or the script argument:
+
+```bash
+LVGL_VERSION=9.5.0 npm run build:wasm
+npm run setup:lvgl -- --version 9.5.0
+```
+
 From the workspace root, the same commands are available through the forwarding scripts in `../package.json`.
 
-`npm run build:wasm` compiles LVGL 9.5 from `./third_party/lvgl` with Emscripten and copies the real runtime to `public/wasm`. The app must be served over HTTP. Opening the WebAssembly build through `file://` is not supported by browsers.
+`npm run build:wasm` compiles LVGL from `./third_party/lvgl` with Emscripten and copies the real runtime to `public/wasm`. The app must be served over HTTP. Opening the WebAssembly build through `file://` is not supported by browsers.
 
 The editable YAML surface is initialized before the optional WASM renderer. A slow or failed LVGL load therefore cannot hide the editor or stop live preview parsing.
 
