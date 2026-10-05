@@ -1,8 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/Users/michael/Projects/WallDisplay/visualizer/wasm/build/cmake_install.cmake",
-		"/Users/michael/Projects/WallDisplay/visualizer/wasm/build/lvgl/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
