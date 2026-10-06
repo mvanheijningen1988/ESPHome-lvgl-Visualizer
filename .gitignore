@@ -26,5 +26,6 @@ coverage/
 *.sln
 *.sw?
 
-/third_party/
-/wasm/build/
+third_party/
+wasm/build/
+test-results/
