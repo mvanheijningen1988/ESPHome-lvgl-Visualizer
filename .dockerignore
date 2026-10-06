@@ -1,0 +1,12 @@
+.git
+.github
+.vite
+coverage
+node_modules
+test-results
+dist
+*.tsbuildinfo
+wasm/build
+third_party/lvgl
+.DS_Store
+*.log

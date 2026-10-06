@@ -12,6 +12,16 @@ npm run build
 npm run build:all
 ```
 
+## Docker
+
+Build and start the production container with:
+
+```bash
+docker compose up --build
+```
+
+The service listens on `http://localhost:5173/`. To rebuild an existing image without pulling dependencies again, use `docker compose build` followed by `docker compose up -d`.
+
 The project now bootstraps `./third_party/lvgl` automatically before npm scripts run. By default it resolves the latest LVGL GitHub release, and you can pin an explicit version either through the environment or the script argument:
 
 ```bash

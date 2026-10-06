@@ -41,6 +41,7 @@ Use the project root as the current directory.
 - `npx vite build` creates the production bundle without running the upstream bootstrap hook.
 - `npm run build:wasm` requires the Emscripten toolchain and generates the local LVGL runtime.
 - `npm run setup:lvgl` or `npm run prebuild` may download/replace `third_party/lvgl`; do not trigger it for ordinary code validation unless explicitly requested.
+- Docker builds use `Dockerfile` and `docker-compose.yml`. The image is a production Vite preview service on port 5173 and must be validated with `docker compose config` and an actual `docker compose build` where Docker is installed.
 
 The project currently targets LVGL 9.5 and ESPHome 2026.8-era syntax. Do not silently broaden compatibility without tests and documentation.
 

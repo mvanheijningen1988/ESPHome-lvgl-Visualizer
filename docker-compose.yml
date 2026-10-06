@@ -1,0 +1,11 @@
+services:
+  esp-home-lvgl-visualizer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: esp-home-lvgl-visualizer:1.0.0
+    ports:
+      - "5173:5173"
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
