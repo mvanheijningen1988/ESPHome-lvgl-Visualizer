@@ -26,7 +26,21 @@ The application is intentionally framework-free outside Monaco, Vite, the genera
    - `npm run typecheck`
    - `npx vite build`
    - `npx playwright test` with the Edge executable when managed Chromium is unavailable
-5. Do not claim completion until the command output is fresh and all required checks pass.
+5. After every change, inspect whether the change affects requirements, usage, compatibility, runtime behavior, deployment, or tests. Update the relevant files when necessary.
+6. Do not claim completion until the command output is fresh and all required checks pass.
+
+## Required documentation and release update check
+
+After every code, configuration, dependency, Docker, or user-visible change, check these files and update them when the change needs to be reflected:
+
+- `SPEC_FLOW.md`: functional requirements, acceptance scenarios, test mapping, impact, and compatibility.
+- `CHANGELOG.md`: user-visible fixes, new features, compatibility changes, and release notes.
+- `README.md`: setup, usage, supported behavior, Docker commands, environment variables, and known limitations.
+- `package.json` and `package-lock.json`: version, scripts, dependencies, and lock consistency.
+- `Dockerfile`, `docker-compose.yml`, and `.dockerignore`: container build/runtime, exposed ports, environment, caching, and files included or excluded.
+- `AGENTS.md` and `.github/AGENTS.md`: project-specific instructions, known pitfalls, and required validation commands that changed.
+
+Do not assume that a change is documentation-only. If a file is affected, update it in the same change and verify the resulting instructions remain accurate. If a file does not need an update, state why in the final response.
 
 ## Commands and environment
 
