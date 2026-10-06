@@ -1,11 +1,12 @@
 import './style.css'
-import type { Diagnostic, LvglWidget, MockEntity, MockValue, ImageAsset, VisualizerModel, WidgetAutomation } from './model'
+import type { Diagnostic, LvglWidget, MockEntity, MockValue, ImageAsset, VisualizerModel } from './model'
 import { parseProjectYaml } from './yaml'
 import { WasmLvglRenderer } from './lvgl-wasm'
 import { loadRequestedFonts } from './font-loader'
 import { loadOnlineImages } from './image-loader'
 import { YamlEditor } from './yaml-editor'
 import { clickPreview, createSelectionState, enterPreview, hoverPreview, leavePreview, selectFromEditor, setSelectionLinkEnabled } from './selection'
+import { resolveWidgetMocks } from './widget-mocks'
 
 const initialYaml = `display:
   width: 480
@@ -180,15 +181,29 @@ function renderWidget(widget: LvglWidget, assets: ImageAsset[], widgetValues: Re
   const asset = widget.source ? assets.find((candidate) => candidate.id === widget.source) : undefined
   const source = imageSource(asset)
   const dimensions = (value: number | string | undefined, suffix = 'px') => typeof value === 'number' ? `${value}${suffix}` : value ?? ''
+  const rawMinimum = Number(widget.raw.min_value ?? 0)
+  const rawMaximum = Number(widget.raw.max_value ?? 100)
+  const configuredValue = widget.id && Object.hasOwn(widgetValues, widget.id) ? widgetValues[widget.id] : widget.value
+  const parsedValue = typeof configuredValue === 'number' || (typeof configuredValue === 'string' && configuredValue.trim() !== '') ? Number(configuredValue) : 0
+  const numericValue = Number.isFinite(parsedValue) ? parsedValue : 0
+  const minimum = Number.isFinite(rawMinimum) ? rawMinimum : 0
+  const maximum = Number.isFinite(rawMaximum) && rawMaximum > minimum ? rawMaximum : minimum + 100
+  const valuePercent = Math.max(0, Math.min(100, (numericValue - minimum) / (maximum - minimum) * 100))
+  const width = Number.parseFloat(String(widget.width ?? 120))
+  const height = Number.parseFloat(String(widget.height ?? (widget.type === 'bar' ? 12 : 48)))
+  const vertical = height > width
   const textColor = widget.id ? widgetTextColors[widget.id] : undefined
   const textColorValue = typeof textColor === 'number' ? '#' + textColor.toString(16).padStart(6, '0') : textColor
   const textColorStyle = textColorValue === undefined ? '' : `color:${textColorValue}`
-  const style = [`left:${dimensions(widget.x ?? 0)}`, `top:${dimensions(widget.y ?? 0)}`, widget.width ? `width:${dimensions(widget.width)}` : '', widget.height ? `height:${dimensions(widget.height)}` : '', widget.color ? `--widget-color:${widget.color}` : '', textColorStyle, source ? `background-image:url("${source}")` : ''].filter(Boolean).join(';')
-  const configuredText = widget.id && Object.hasOwn(widgetValues, widget.id) ? String(widgetValues[widget.id]) : widget.text
-  const textValue = configuredText ? replaceMockTokens(configuredText) : undefined
-  const text = textValue ? `<span>${escapeHtml(textValue)}</span>` : ''
+  const style = [`left:${dimensions(widget.x ?? 0)}`, `top:${dimensions(widget.y ?? 0)}`, widget.width !== undefined ? `width:${dimensions(widget.width)}` : '', widget.height !== undefined ? `height:${dimensions(widget.height)}` : '', widget.type === 'bar' ? `--widget-height:${dimensions(widget.height ?? 12)}` : '', widget.color ? `--widget-color:${widget.color}` : '', widget.type === 'slider' || widget.type === 'bar' ? `--widget-value:${valuePercent}%` : '', textColorStyle, source ? `background-image:url("${source}")` : ''].filter(Boolean).join(';')
+  const supportsMockText = ['label', 'button', 'checkbox', 'dropdown', 'roller', 'textarea', 'spinbox', 'buttonmatrix', 'msgbox'].includes(widget.type)
+  const configuredText = supportsMockText && widget.id && Object.hasOwn(widgetValues, widget.id) ? String(widgetValues[widget.id]) : widget.text
+  const textValue = configuredText === undefined ? undefined : replaceMockTokens(configuredText)
+  const text = textValue === undefined ? '' : `<span>${escapeHtml(textValue)}</span>`
+  const valueParts = widget.type === 'bar' ? '<span class="widget-indicator"></span>' : widget.type === 'slider' ? '<span class="widget-indicator"></span><span class="widget-knob"></span>' : ''
   const checked = widget.type === 'switch' && (widgetValues[widget.id ?? ''] === true || widget.raw.state === true || widget.raw.checked === true) ? ' is-checked' : ''
-  return `<div class="lvgl-widget widget-${widget.type}${checked}" data-widget-key="${escapeHtml(widget.instanceKey ?? '')}" style="${style}">${text}${children}</div>`
+  const orientation = widget.type === 'slider' && vertical ? ' is-vertical' : ''
+  return `<div class="lvgl-widget widget-${widget.type}${checked}${orientation}" data-widget-key="${escapeHtml(widget.instanceKey ?? '')}" style="${style}">${valueParts}${text}${children}</div>`
 }
 function diagnosticMarkup(item: Diagnostic): string {
   let icon = 'i'
@@ -207,57 +222,6 @@ function entityControls(entities: MockEntity[], widgetValues: Record<string, Moc
     else control = `<input class="entity-input" data-entity="${escapeHtml(entity.id)}" value="${escapeHtml(String(value))}" placeholder="mock value">`
     return `<label class="entity-control"><span title="${escapeHtml(entity.id)}">${escapeHtml(entity.id)}<small>${escapeHtml(entity.type)}</small></span>${control}</label>`
   }).join('') : '<span class="muted-copy">Entities appear when declared in YAML.</span>'
-}
-function numericMockValue(value: MockValue): number {
-  if (typeof value === 'boolean') return value ? 1 : 0
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-function conditionalBranch(expression: string, value: MockValue): string {
-  if (!expression.includes('x > 0')) return expression
-  const question = expression.indexOf('?')
-  const colon = expression.indexOf(':', question + 1)
-  if (question < 0 || colon < 0) return expression
-  const selected = numericMockValue(value) > 0 ? expression.slice(question + 1, colon) : expression.slice(colon + 1)
-  return selected.replace(/;\s*$/, '').trim()
-}
-function evaluateFormattedValue(value: unknown, sourceValue: MockValue): string | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const format = (value as { format?: unknown }).format
-  if (typeof format !== 'string') return undefined
-  const precision = /%\.(\d+)f/.exec(format)?.[1]
-  const formatted = numericMockValue(sourceValue).toFixed(precision === undefined ? 0 : Number(precision))
-  return format.replace(/%\.?\d*f/, formatted).replaceAll('%%', '%')
-}
-function evaluateAutomation(automation: WidgetAutomation, sourceValue: MockValue): MockValue | undefined {
-  if (automation.property === 'checked') {
-    if (typeof automation.value === 'boolean') return automation.value
-    if (typeof automation.value === 'string' && /return\s+x\s*>\s*0/.test(automation.value)) return numericMockValue(sourceValue) > 0
-    return undefined
-  }
-  const formatted = evaluateFormattedValue(automation.value, sourceValue)
-  if (formatted !== undefined) return formatted
-  if (typeof automation.value !== 'string') return automation.value as string | number | undefined
-  const selected = conditionalBranch(automation.value, sourceValue)
-  if (automation.property === 'text_color') {
-    const colorMatch = /lv_color_hex\((0x[\da-f]+|\d+)\)/i.exec(selected)
-    return colorMatch ? Number(colorMatch[1]) : undefined
-  }
-  const stringMatch = /(?:std::string\()?['"]([^'"]*)['"]/.exec(selected)
-  return stringMatch?.[1]
-}
-function resolveWidgetMocks(model: VisualizerModel): { values: Record<string, MockValue>; textColors: Record<string, string | number> } {
-  const values = Object.fromEntries(model.entities.flatMap((entity) => entity.targetWidgetId && Object.hasOwn(mockValues, entity.id) ? [[entity.targetWidgetId, mockValues[entity.id]]] : []))
-  const textColors: Record<string, string | number> = {}
-  for (const automation of model.automations) {
-    const sourceValue = mockValues[automation.sourceId]
-    if (sourceValue === undefined || sourceValue === '') continue
-    const result = evaluateAutomation(automation, sourceValue)
-    if (result === undefined) continue
-    if (automation.property === 'text_color' && (typeof result === 'string' || typeof result === 'number')) textColors[automation.targetWidgetId] = result
-    else values[automation.targetWidgetId] = result
-  }
-  return { values, textColors }
 }
 function propagateSwitchMock(model: VisualizerModel, switchId: string, checked: boolean): void {
   const source = model.automations.find((automation) => automation.property === 'checked' && automation.targetWidgetId === switchId)?.sourceId
@@ -391,7 +355,7 @@ function updatePreviewScale(): void {
 function render(model: VisualizerModel): void {
   const allDiagnostics = [...model.diagnostics, ...fontDiagnostics, ...imageDiagnostics]
   const filteredDiagnostics = allDiagnostics.filter((item) => visibleSeverities.has(item.severity))
-  const { values: widgetValues, textColors: widgetTextColors } = resolveWidgetMocks(model)
+  const { values: widgetValues, textColors: widgetTextColors } = resolveWidgetMocks(model, mockValues)
   pageSelect.innerHTML = model.pages.map((page) => `<option value="${escapeHtml(page.id)}">${escapeHtml(page.id)}</option>`).join('') || '<option value="">No pages</option>'
   if (model.pages.some((page) => page.id === selectedPage)) pageSelect.value = selectedPage
   else selectedPage = model.pages[0]?.id ?? ''
@@ -682,6 +646,8 @@ async function initializeWasm(): Promise<void> {
     void synchronizeFonts(currentModel)
     void synchronizeImages(currentModel)
   } catch (error: unknown) {
+    wasmRenderer = undefined
+    document.body.classList.remove('wasm-ready')
     const message = error instanceof Error ? error.message : 'LVGL WebAssembly runtime could not be loaded.'
     document.body.dataset.lvglRuntime = 'fallback'
     currentModel.diagnostics.push({ severity: 'warning', message, source: 'lvgl_runtime.js' })

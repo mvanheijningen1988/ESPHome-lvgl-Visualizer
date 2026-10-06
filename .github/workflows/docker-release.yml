@@ -73,3 +73,36 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Update Docker Hub description
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import base64
+          import json
+          import os
+          import pathlib
+          import urllib.request
+
+          username = os.environ["DOCKERHUB_USERNAME"]
+          token = os.environ["DOCKERHUB_TOKEN"]
+          description = pathlib.Path("DOCKERHUB_DESCRIPTION.md").read_text(encoding="utf-8")
+          payload = json.dumps({"full_description": description}).encode("utf-8")
+
+          req = urllib.request.Request(
+              f"https://hub.docker.com/v2/repositories/{username}/esp-home-lvgl-visualizer/",
+              data=payload,
+              headers={"Content-Type": "application/json"},
+              method="PATCH",
+          )
+          auth = base64.b64encode(f"{username}:{token}".encode("utf-8")).decode("ascii")
+          req.add_header("Authorization", f"Basic {auth}")
+
+          with urllib.request.urlopen(req, timeout=30) as response:
+              if response.status not in (200, 202):
+                  raise RuntimeError(f"Unexpected Docker Hub response: {response.status}")
+              print(f"Docker Hub description updated for {username}/esp-home-lvgl-visualizer")
+          PY

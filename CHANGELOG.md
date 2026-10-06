@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Added a Docker Hub release workflow for pushes to `main` and `development`; stable pushes publish the package version and `latest`, while development pushes publish the package version with a `-dev` candidate suffix, for example `1.0.0-dev`.
+- Added automatic Docker Hub description sync from `DOCKERHUB_DESCRIPTION.md` so the Docker Hub overview remains current with the repository.
 
 ## [1.0.0] - 2026-10-05
 

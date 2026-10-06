@@ -250,6 +250,28 @@ lv_obj_t *lvgl_bridge_create_obj(lv_obj_t *parent, int x, int y, int width, int 
 }
 
 EMSCRIPTEN_KEEPALIVE
+lv_obj_t *lvgl_bridge_create_bar(lv_obj_t *parent, int x, int y, int width, int height, int minimum, int maximum, int value) {
+    lv_obj_t *bar = lv_bar_create(parent ? parent : screen_root);
+    lv_obj_set_pos(bar, x, y);
+    lv_obj_set_size(bar, width > 0 ? width : 100, height > 0 ? height : 12);
+    if (maximum <= minimum) maximum = minimum + 1;
+    lv_bar_set_range(bar, minimum, maximum);
+    lv_bar_set_value(bar, value, LV_ANIM_OFF);
+    return bar;
+}
+
+EMSCRIPTEN_KEEPALIVE
+lv_obj_t *lvgl_bridge_create_slider(lv_obj_t *parent, int x, int y, int width, int height, int minimum, int maximum, int value, int vertical) {
+    lv_obj_t *slider = lv_slider_create(parent ? parent : screen_root);
+    lv_obj_set_pos(slider, x, y);
+    lv_obj_set_size(slider, width > 0 ? width : (vertical ? 20 : 100), height > 0 ? height : (vertical ? 100 : 20));
+    if (maximum <= minimum) maximum = minimum + 1;
+    lv_slider_set_range(slider, minimum, maximum);
+    lv_slider_set_value(slider, value, LV_ANIM_OFF);
+    return slider;
+}
+
+EMSCRIPTEN_KEEPALIVE
 lv_obj_t *lvgl_bridge_create_label(lv_obj_t *parent, const char *text, int x, int y) {
     lv_obj_t *label = lv_label_create(parent ? parent : screen_root);
     lv_label_set_text(label, text ? text : "");
