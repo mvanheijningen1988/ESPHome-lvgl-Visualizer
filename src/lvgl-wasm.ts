@@ -180,15 +180,15 @@ export class WasmLvglRenderer {
   private createWidget(widget: LvglWidget, parent: number, model: VisualizerModel, widgetValues: Record<string, MockValue>, widgetTextColors: Record<string, string | number>): number {
     const x = integer(widget.x, 0)
     const y = integer(widget.y, 0)
-    const width = integer(widget.width, widget.type === 'switch' ? 50 : 120)
-    const height = integer(widget.height, widget.type === 'switch' ? 25 : 48)
+    const width = integer(widget.width, widget.type === 'switch' ? 50 : widget.type === 'bar' ? 100 : widget.type === 'slider' ? 100 : 120)
+    const height = integer(widget.height, widget.type === 'switch' ? 25 : widget.type === 'bar' ? 12 : widget.type === 'slider' ? 20 : 48)
     const mockValue = widget.id ? widgetValues[widget.id] : undefined
     const text = mockValue !== undefined && typeof mockValue !== 'boolean' ? String(mockValue) : widget.text ?? ''
     const handle = this.createNativeWidget(widget, parent, { x, y, width, height }, text, mockValue)
     const raw = widget.raw
     const fontId = typeof raw.text_font === 'string' ? raw.text_font : ''
-    const configuredWidth = widget.width ?? (widget.type === 'switch' ? width : undefined)
-    const configuredHeight = widget.height ?? (widget.type === 'switch' ? height : undefined)
+    const configuredWidth = widget.width ?? (['switch', 'slider', 'bar'].includes(widget.type) ? width : undefined)
+    const configuredHeight = widget.height ?? (['switch', 'slider', 'bar'].includes(widget.type) ? height : undefined)
     this.call('lvgl_bridge_configure_obj', null,
       ['number', 'string', 'string', 'number', 'number', 'string', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'string'],
       [handle, dimension(configuredWidth), dimension(configuredHeight), x, y, typeof raw.align === 'string' ? raw.align.toLowerCase() : '',
@@ -202,6 +202,20 @@ export class WasmLvglRenderer {
 
   private createNativeWidget(widget: LvglWidget, parent: number, geometry: WidgetGeometry, text: string, mockValue: MockValue | undefined): number {
     const { x, y, width, height } = geometry
+    if (widget.type === 'bar' || widget.type === 'slider') {
+      const minimum = integer(widget.raw.min_value as number | string | undefined, 0)
+      const maximum = integer(widget.raw.max_value as number | string | undefined, 100)
+      const mockNumber = typeof mockValue === 'number' || (typeof mockValue === 'string' && mockValue.trim() !== '') ? Number(mockValue) : Number.NaN
+      const configuredValue = Number.isFinite(mockNumber) ? mockNumber : widget.value ?? minimum
+      const value = Math.max(minimum, Math.min(maximum, configuredValue))
+      const vertical = widget.type === 'slider' && height > width
+      if (widget.type === 'bar') return this.call('lvgl_bridge_create_bar', 'number',
+        ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number'],
+        [parent, x, y, width, height, minimum, maximum, value])
+      return this.call('lvgl_bridge_create_slider', 'number',
+        ['number', 'number', 'number', 'number', 'number', 'number', 'number', 'number', 'number'],
+        [parent, x, y, width, height, minimum, maximum, value, vertical ? 1 : 0])
+    }
     if (widget.type === 'label') return this.call('lvgl_bridge_create_label', 'number', ['number', 'string', 'number', 'number'], [parent, text, x, y])
     if (widget.type === 'image') return this.call('lvgl_bridge_create_image', 'number', ['number', 'string', 'number', 'number', 'number', 'number'], [parent, widget.source ?? '', x, y, width, height])
     if (widget.type === 'switch') {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseProjectYaml } from './yaml'
+import { resolveWidgetMocks } from './widget-mocks'
 
 describe('parseProjectYaml', () => {
   it('normalizes pages, layers, assets and entities', () => {
@@ -324,6 +325,52 @@ lvgl:
       expect.objectContaining({ sourceId: 'light_brightness', targetWidgetId: 'light_icon', property: 'text_color' }),
       expect.objectContaining({ sourceId: 'light_brightness', targetWidgetId: 'light_toggle', property: 'checked' }),
     ])
+  })
+
+  it('propagates text sensor return x values, including an explicit empty string', () => {
+    const model = parseProjectYaml(`
+text_sensor:
+  - id: weather_state
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: weather_label
+            text: !lambda return x;
+lvgl:
+  pages:
+    - id: main
+      widgets:
+        - label:
+            id: weather_label
+            text: Waiting
+`)
+
+    expect(resolveWidgetMocks(model, { weather_state: 'Rain expected' }).values.weather_label).toBe('Rain expected')
+    expect(resolveWidgetMocks(model, { weather_state: '' }).values.weather_label).toBe('')
+  })
+
+  it('preserves LVGL slider and bar range settings, including a zero value', () => {
+    const model = parseProjectYaml(`
+lvgl:
+  pages:
+    - id: main
+      widgets:
+        - slider:
+            id: brightness
+            min_value: 10
+            max_value: 90
+            value: 0
+            height: 180
+            width: 24
+        - bar:
+            id: progress
+            min_value: 0
+            max_value: 200
+            value: 50
+`)
+
+    expect(model.pages[0]?.widgets[0]).toMatchObject({ type: 'slider', value: 0, raw: { min_value: 10, max_value: 90 } })
+    expect(model.pages[0]?.widgets[1]).toMatchObject({ type: 'bar', value: 50, raw: { min_value: 0, max_value: 200 } })
   })
 
   it('assigns distinct source ranges to duplicate anonymous widgets', () => {

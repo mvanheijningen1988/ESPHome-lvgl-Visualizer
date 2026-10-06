@@ -25,6 +25,13 @@ footer { width: min(1500px, 92vw); margin: 0 auto; padding: 20px 0 28px; justify
 .monaco-editor .yaml-source-selection-gutter { border-left: 2px solid var(--accent); margin-left: 5px; }
 .source-file-control { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
 .source-file-control select { max-width: 150px; min-width: 90px; border: 1px solid var(--line); background: #101a1c; color: var(--ink); padding: 5px; font: 11px 'DM Mono', monospace; }
+.lvgl-widget.widget-slider { overflow: visible; padding: 0; border-radius: 999px; background: #34494b; }
+.widget-slider .widget-indicator { position: absolute; left: 0; top: 0; width: var(--widget-value, 0%); height: 100%; border-radius: inherit; background: var(--cyan); }
+.widget-slider .widget-knob { position: absolute; left: var(--widget-value, 0%); top: 50%; width: 18px; height: 18px; border: 2px solid #142224; border-radius: 50%; background: #f1f5f2; transform: translate(-50%, -50%); }
+.widget-slider.is-vertical .widget-indicator { top: auto; bottom: 0; width: 100%; height: var(--widget-value, 0%); }
+.widget-slider.is-vertical .widget-knob { left: 50%; top: auto; bottom: var(--widget-value, 0%); transform: translate(-50%, 50%); }
+.lvgl-widget.widget-bar { height: var(--widget-height, 12px) !important; padding: 0; border-radius: 999px; background: #34494b; }
+.widget-bar .widget-indicator { display: block; width: var(--widget-value, 0%); height: 100%; border-radius: inherit; background: var(--cyan); }
 @media (max-width: 720px) {
 	.editor-panel .editor-actions { justify-content: flex-start; flex-wrap: wrap; gap: 6px; }
 	.source-file-control select { max-width: 130px; min-width: 72px; }
