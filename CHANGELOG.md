@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a Docker Hub release workflow for pushes to `main` and `development`; stable pushes publish the package version and `latest`, while development pushes publish the package version with a `-dev` candidate suffix, for example `1.0.0-dev`.
+
 ## [1.0.0] - 2026-10-05
 
 - Fixed YAML caret and mouse positions drifting from visible characters after webfonts load; added browser regressions for End/arrow navigation, typing, Backspace/Delete, late fonts, and desktop/mobile horizontal scrolling.

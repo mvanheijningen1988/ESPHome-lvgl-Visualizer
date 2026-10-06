@@ -22,6 +22,13 @@ docker compose up --build
 
 The service listens on `http://localhost:5173/`. To rebuild an existing image without pulling dependencies again, use `docker compose build` followed by `docker compose up -d`.
 
+GitHub Actions publishes the image to Docker Hub on every push to `main` or `development`:
+
+- `main` publishes `docker.io/<username>/esp-home-lvgl-visualizer:<package-version>` and `:latest`.
+- `development` publishes a candidate image named `docker.io/<username>/esp-home-lvgl-visualizer:<package-version>-dev`, for example `1.0.0-dev`.
+
+Configure the repository or organization secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` before pushing either branch. The workflow requires Docker Buildx, builds the Linux AMD64 image, and uses the repository's `Dockerfile`.
+
 The project now bootstraps `./third_party/lvgl` automatically before npm scripts run. By default it resolves the latest LVGL GitHub release, and you can pin an explicit version either through the environment or the script argument:
 
 ```bash

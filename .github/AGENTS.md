@@ -56,6 +56,8 @@ Use the project root as the current directory.
 - `npm run build:wasm` requires the Emscripten toolchain and generates the local LVGL runtime.
 - `npm run setup:lvgl` or `npm run prebuild` may download/replace `third_party/lvgl`; do not trigger it for ordinary code validation unless explicitly requested.
 - Docker builds use `Dockerfile` and `docker-compose.yml`. The image is a production Vite preview service on port 5173 and must be validated with `docker compose config` and an actual `docker compose build` where Docker is installed.
+- The Docker release workflow publishes on pushes to `main` and `development`. `main` uses the package version plus `latest`; `development` uses `<package-version>-dev`, for example `1.0.0-dev`, without a run-number suffix.
+- Docker Hub publishing requires `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository or organization secrets. Do not expose credentials in workflow files, logs, or commit history.
 
 The project currently targets LVGL 9.5 and ESPHome 2026.8-era syntax. Do not silently broaden compatibility without tests and documentation.
 
