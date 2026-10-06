@@ -36,9 +36,12 @@ After every code, configuration, dependency, Docker, or user-visible change, che
 - `SPEC_FLOW.md`: functional requirements, acceptance scenarios, test mapping, impact, and compatibility.
 - `CHANGELOG.md`: user-visible fixes, new features, compatibility changes, and release notes.
 - `README.md`: setup, usage, supported behavior, Docker commands, environment variables, and known limitations.
+- `DOCKERHUB_DESCRIPTION.md`: Docker Hub overview text that must remain synchronized with the project and the current image behavior.
 - `package.json` and `package-lock.json`: version, scripts, dependencies, and lock consistency.
 - `Dockerfile`, `docker-compose.yml`, and `.dockerignore`: container build/runtime, exposed ports, environment, caching, and files included or excluded.
 - `AGENTS.md` and `.github/AGENTS.md`: project-specific instructions, known pitfalls, and required validation commands that changed.
+
+Keep `DOCKERHUB_DESCRIPTION.md` updated whenever user-visible behavior, setup steps, Docker tags, or runtime instructions change so the Docker Hub page reflects the current project state and the release workflow can publish the latest overview text automatically.
 
 Do not assume that a change is documentation-only. If a file is affected, update it in the same change and verify the resulting instructions remain accurate. If a file does not need an update, state why in the final response.
 
